@@ -119,26 +119,45 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
       return created._id;
     },
 
+    /**
+     * `transaction/edit` is a full replace, so anything not resent is erased.
+     * The read returns `images`, `address`, `latitude`, `longtitude`, `remind`
+     * and `metadata`, and the official app populates them — a receipt photo
+     * attached on a phone would vanish on a note change. Note the asymmetry:
+     * the read field is `images` (a list) while the write field is `image`.
+     */
     async editTransaction(id: string, patch: TransactionPatch): Promise<void> {
       const row = await rowFor(id);
-      const category = patch.category ? await resolveCategory(patch.category) : null;
-      const type = category?.type ?? kind(row.category.type);
+      /**
+       * Never reuse the row's own category id.
+       *
+       * `transaction/list-all` returns the **wallet-scoped** id, and a write
+       * carrying that holds the connection until Cloudflare 524s at ~120s
+       * instead of erroring. So even when the category isn't changing, it has
+       * to be re-resolved through `category/list-all` by name.
+       */
+      const category = await resolveCategory(
+        patch.category ?? row.category.name ?? row.category._id,
+      );
+      const type = category.type;
       await call("/transaction/edit", {
         _id: id,
         account: row.account._id,
-        category: category?.id ?? row.category._id,
+        category: category.id,
         amount: patch.amount !== undefined ? signedAmount(patch.amount, type) : row.amount,
         note: patch.note ?? row.note ?? "",
         displayDate: patch.date ?? day(row.displayDate),
         event: patch.eventId !== undefined ? (patch.eventId ?? "") : (row.campaign?.[0] ?? ""),
         exclude_report: patch.excludeReport ?? Boolean(row.exclude_report),
         with: patch.people ?? row.with ?? [],
-        latitude: 0,
-        longtitude: 0,
-        addressName: "",
-        addressDetails: "",
-        addressIcon: "",
-        image: "",
+        latitude: row.latitude ?? 0,
+        longtitude: row.longtitude ?? 0,
+        addressName: row.address?.name ?? "",
+        addressDetails: row.address?.details ?? "",
+        addressIcon: row.address?.icon ?? "",
+        image: row.images?.[0] ?? "",
+        remind: row.remind ?? 0,
+        metadata: row.metadata ?? "",
       });
     },
 

@@ -122,3 +122,29 @@ describe("createStructureApi — categories", () => {
     await assert.rejects(() => structure.deleteCategory("Nope"), /no category/);
   });
 });
+
+describe("createStructureApi — cache invalidation", () => {
+  /** Deleting a wallet deletes its transactions server-side. */
+  it("drops the transaction cache too, not just the structure entries", async () => {
+    const dropped: string[] = [];
+    const cache = {
+      read: <T>(_k: string, load: () => Promise<T>) => load(),
+      drop: (...keys: string[]) => dropped.push(...keys),
+    };
+    const backend = {
+      name: "web",
+      can: ALL,
+      deleteWallet: async () => {},
+    } as unknown as Backend;
+
+    await createStructureApi({
+      backend,
+      cache,
+      wallets: async () => WALLETS,
+      categories: async () => CATEGORIES,
+    }).deleteWallet("Savings");
+
+    assert.ok(dropped.includes("transactions"), "transactions must be invalidated");
+    assert.ok(dropped.includes("wallets"));
+  });
+});

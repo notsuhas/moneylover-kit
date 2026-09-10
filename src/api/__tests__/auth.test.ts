@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -218,5 +218,23 @@ describe("accessToken", () => {
       throw new Error("should not log in again");
     }) as typeof fetch;
     assert.equal(await accessToken({ backend: "web" }), opaque);
+  });
+});
+
+describe("token cache permissions", () => {
+  /** `mode` applies on creation only; an existing loose file stays loose. */
+  it("repairs permissions when overwriting an existing cache", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    stubFetch({ ...WEB_ROUTES, "oauth.moneylover.me/token": { access_token: jwt(3600) } });
+    await accessToken({ backend: "web" });
+
+    const path = tokenLocation("web", "a@b.c");
+    chmodSync(path, 0o644);
+    assert.equal(statSync(path).mode & 0o777, 0o644, "loosened for the test");
+
+    stubFetch({ ...WEB_ROUTES, "oauth.moneylover.me/token": { access_token: jwt(7200) } });
+    await accessToken({ backend: "web", force: true });
+    assert.equal(statSync(path).mode & 0o777, 0o600);
   });
 });

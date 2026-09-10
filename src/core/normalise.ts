@@ -42,6 +42,17 @@ export interface WireTransaction {
   related?: string;
   /** The mobile pull returns soft-deleted rows; the web list does not. */
   isDelete?: boolean;
+  /**
+   * Fields no consumer here reads, but which a **full-replace** write must
+   * resend or destroy. The official apps populate them.
+   */
+  images?: string[];
+  address?: { name?: string; details?: string; icon?: string };
+  latitude?: number;
+  longtitude?: number;
+  remind?: number;
+  metadata?: string;
+  mark_report?: boolean;
 }
 
 export function normaliseWallet(w: WireWallet): Wallet {
@@ -74,6 +85,7 @@ export function normaliseTransaction(t: WireTransaction): Transaction {
     eventIds: t.campaign ?? [],
     excludeReport: Boolean(t.exclude_report),
     relatedId: t.related,
+    remindAt: t.remind,
   };
 }
 

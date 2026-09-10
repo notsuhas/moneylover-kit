@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type BackendName, MoneyLoverError } from "../core/types.js";
@@ -63,8 +63,12 @@ function readCache(path: string): Cached | null {
 
 function writeCache(path: string, value: Cached): void {
   mkdirSync(dirname(path), { recursive: true });
-  // 0600: this token is equivalent to the account password for reads and writes.
+  // This token is equivalent to the account password for reads and writes, so
+  // keep it owner-only. `mode` applies on creation only, so an existing file
+  // that was copied or chmodded stays as it was — chmod after writing repairs
+  // it rather than leaving a world-readable token in place.
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 /** True when the JWT is absent, unparseable, or within a minute of expiry. */

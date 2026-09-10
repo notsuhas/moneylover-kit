@@ -171,9 +171,16 @@ wallets, nested under a parent". The web API models none of this.
 
 ### A transaction write is a full replace, not a patch
 
-Omit a field and it is **cleared**. A hand-rolled payload silently wipes the
-people (`with`), the event, `exclude_report` and the reminder. Always re-read
-the row and rebuild the whole object from it.
+Omit a field and it is **cleared**. The list of things this quietly destroys is
+longer than it first appears: people (`with`), the event, `exclude_report`, the
+reminder, the receipt image, the location, the address, and the `metadata` the
+official client keeps its own state in. Always re-read the row and rebuild the
+whole object from it.
+
+Two asymmetries make it worse. The read field is `images` (a list) while the
+write field is `image` (one string). And a category push is a full replace too,
+so an edit that rebuilds a row from its name and icon alone silently unnests it
+by dropping `pi`.
 
 This is the reason no other client offers an update: it looks like it works.
 
@@ -222,6 +229,23 @@ Balances exclude **future-dated** transactions, while a transaction list
 includes them, so the two reconcile only after you subtract future rows. If your
 own totals disagree by a suspiciously round amount, look for scheduled
 transactions dated ahead of today before assuming anything is broken.
+
+### A category is stored once per wallet, so an edit is N writes
+
+Renaming a category on the mobile API means pushing one item per wallet plus
+the label. Miss the label and the app still shows the old name; miss a wallet
+and that wallet disagrees with the rest.
+
+Related: a label with an empty `exclude_accounts` means "active in every
+wallet". So a category created in **one** wallet needs every *other* wallet
+listed as excluded, or the label claims a scope its rows do not have.
+
+### Balances in different currencies are not comparable
+
+A wallet carries a numeric `currency_id` and nothing converts between them.
+Any total across wallets — a person's lending balance, for instance — has to be
+grouped per currency, because adding INR 5,000 to USD 100 to get 5,100 is worse
+than returning nothing.
 
 ### People are free text
 

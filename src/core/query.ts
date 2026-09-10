@@ -44,14 +44,21 @@ export function findCategory(categories: Category[], value: string, walletId?: s
  */
 export function categoryIndex(categories: Category[]): (t: Transaction) => Category | undefined {
   const byId = new Map(categories.map((c) => [c.id, c]));
-  const byName = new Map<string, Category>();
+  // Keyed on name *and* direction: an account can hold an income and an
+  // expense category with the same name — Money Lover ships two called
+  // "Uncategorized" — and picking whichever was listed first would attach the
+  // wrong metadata to a row.
+  const byNameAndType = new Map<string, Category>();
   for (const c of categories) {
-    const key = c.name.toLowerCase();
-    if (!byName.has(key)) byName.set(key, c);
+    const key = `${c.name.toLowerCase()}\u241f${c.type}`;
+    if (!byNameAndType.has(key)) byNameAndType.set(key, c);
   }
-  return (t) =>
-    byId.get(t.categoryId) ??
-    (t.categoryName ? byName.get(t.categoryName.toLowerCase()) : undefined);
+  return (t) => {
+    const exact = byId.get(t.categoryId);
+    if (exact) return exact;
+    if (!t.categoryName) return undefined;
+    return byNameAndType.get(`${t.categoryName.toLowerCase()}\u241f${t.type}`);
+  };
 }
 
 /** Apply a query. Backend-agnostic: both return the same normalised rows. */

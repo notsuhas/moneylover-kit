@@ -42,6 +42,14 @@ const KIND_BY_METADATA = new Map<string, LendingKind>(
 
 export interface PersonBalance {
   person: string;
+  /**
+   * Money Lover's numeric currency id for this balance.
+   *
+   * A person gets one row per currency. Adding INR 5,000 to USD 100 to make
+   * 5,100 would be worse than useless, and there is no exchange rate here to
+   * convert with.
+   */
+  currencyId: number;
   /** Money you handed over. */
   lent: number;
   /** How much of it has come back. */
@@ -98,19 +106,39 @@ export function lendingKindOf(
  * only defensible reading: the wire format records who was involved, not who
  * owes what share.
  */
+/**
+ * Split an amount between people without losing minor units.
+ *
+ * Rounding each share independently loses money: 100 across three people
+ * becomes three lots of 33.33, totalling 99.99, and the gap compounds over
+ * thousands of rows. So the split happens in paise/cents and the remainder is
+ * handed out one unit at a time, which makes the shares sum to the original
+ * exactly.
+ */
+export function splitMinorUnits(amount: number, ways: number): number[] {
+  const total = Math.round(Math.abs(amount) * 100);
+  const base = Math.floor(total / ways);
+  const remainder = total - base * ways;
+  return Array.from({ length: ways }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
 export function lendingSummary(
   transactions: Transaction[],
   categories: Category[],
   person?: string,
+  /** Wallet id to currency id. Balances are grouped per currency. */
+  currencyOf?: Map<string, number>,
 ): PersonBalance[] {
   const lookup = categoryIndex(categories);
   const kindOf = (t: Transaction): LendingKind | null => {
     const metadata = lookup(t)?.metadata;
     return metadata ? (KIND_BY_METADATA.get(metadata) ?? null) : null;
   };
+  // One bucket per (person, currency), not per person.
   const byPerson = new Map<string, PersonBalance>();
-  const blank = (name: string): PersonBalance => ({
+  const blank = (name: string, currencyId: number): PersonBalance => ({
     person: name,
+    currencyId,
     lent: 0,
     collected: 0,
     outstanding: 0,
@@ -125,28 +153,32 @@ export function lendingSummary(
     if (!kind) continue;
     // An unnamed loan still belongs somewhere, or it silently vanishes.
     const names = t.people.length > 0 ? t.people : ["(unnamed)"];
-    const share = Math.abs(t.amount) / names.length;
+    const currencyId = currencyOf?.get(t.walletId) ?? 0;
+    const shares = splitMinorUnits(t.amount, names.length);
 
-    for (const name of names) {
-      const entry = byPerson.get(name) ?? blank(name);
+    for (const [index, name] of names.entries()) {
+      const key = `${name}\u241f${currencyId}`;
+      const entry = byPerson.get(key) ?? blank(name, currencyId);
+      const share = shares[index] ?? 0;
       if (kind === "lend") entry.lent += share;
       if (kind === "collect") entry.collected += share;
       if (kind === "borrow") entry.borrowed += share;
       if (kind === "repay") entry.repaid += share;
       entry.transactionCount += 1;
-      byPerson.set(name, entry);
+      byPerson.set(key, entry);
     }
   }
 
-  const round = (n: number) => Math.round(n * 100) / 100;
+  // Accumulated in minor units; converted once, at the end.
+  const major = (minor: number) => minor / 100;
   const rows = [...byPerson.values()].map((e) => ({
     ...e,
-    lent: round(e.lent),
-    collected: round(e.collected),
-    borrowed: round(e.borrowed),
-    repaid: round(e.repaid),
-    outstanding: round(e.lent - e.collected),
-    owing: round(e.borrowed - e.repaid),
+    lent: major(e.lent),
+    collected: major(e.collected),
+    borrowed: major(e.borrowed),
+    repaid: major(e.repaid),
+    outstanding: major(e.lent - e.collected),
+    owing: major(e.borrowed - e.repaid),
   }));
 
   // Substring, not equality: people are free text, so one human is often

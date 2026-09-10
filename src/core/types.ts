@@ -25,6 +25,13 @@ export interface Category {
   walletId?: string;
   /** `IS_LOAN`, `IS_REPAYMENT`, … marks a category the app special-cases. */
   metadata?: string;
+  /**
+   * The parent's id *in the same wallet*. Mobile only, and a full-replace
+   * write must resend it or the category quietly stops being nested.
+   */
+  parentId?: string;
+  /** Money Lover's own grouping number. Resent unchanged on an edit. */
+  group?: number;
 }
 
 /** Global category record — the only layer that spans wallets and nests. Mobile only. */
@@ -56,6 +63,8 @@ export interface Transaction {
   excludeReport: boolean;
   /** The other leg of a transfer, when there is one. */
   relatedId?: string;
+  /** Reminder timestamp, in whatever units Money Lover stored it. 0 or absent means none. */
+  remindAt?: number;
 }
 
 export interface NewTransaction {
@@ -81,6 +90,13 @@ export interface TransactionPatch {
   people?: string[];
   eventId?: string | null;
   excludeReport?: boolean;
+}
+
+export interface RetagEntry {
+  /** Transaction id. */
+  id: string;
+  /** Target category name or id. */
+  category: string;
 }
 
 export interface TransactionQuery {
@@ -170,6 +186,12 @@ export interface Backend {
   addTransaction(input: NewTransaction): Promise<string>;
   editTransaction(id: string, patch: TransactionPatch): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
+  /**
+   * Recategorise many transactions in as few requests as the API allows.
+   * Present only where the backend can batch; callers should fall back to
+   * `editTransaction` in a loop.
+   */
+  retagTransactions?(plan: RetagEntry[]): Promise<number>;
 
   // Structure. Present only where `can` says so.
   addWallet?(input: NewWallet): Promise<string>;

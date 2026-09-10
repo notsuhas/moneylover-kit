@@ -98,10 +98,22 @@ export function createStructure({ push, wallets, categories, labels }: Structure
   const byName = (all: Category[], name: string, wallet: string) =>
     all.find((c) => c.name.toLowerCase() === name.toLowerCase() && c.walletId === wallet);
 
-  async function labelFor(name: string): Promise<Label> {
-    const hit = (await labels()).find((l) => l.name.toLowerCase() === name.toLowerCase());
-    if (!hit) throw new MoneyLoverError(`no category named ${JSON.stringify(name)}`);
-    return hit;
+  /**
+   * Find the label for a name, a label id, **or** a per-wallet category id.
+   *
+   * The caller resolves a category through the per-wallet list, so what
+   * arrives here is usually a per-wallet gid that no label is keyed on. Only
+   * matching names and label ids made every mobile edit and delete fail.
+   */
+  async function labelFor(reference: string): Promise<Label> {
+    const all = await labels();
+    const byId = all.find((l) => l.id === reference);
+    if (byId) return byId;
+    const containing = all.find((l) => l.categoryIds.includes(reference));
+    if (containing) return containing;
+    const byName = all.find((l) => l.name.toLowerCase() === reference.toLowerCase());
+    if (byName) return byName;
+    throw new MoneyLoverError(`no category ${JSON.stringify(reference)}`);
   }
 
   /** Resolve which wallets a write targets: one named, or all of them. */
@@ -134,6 +146,13 @@ export function createStructure({ push, wallets, categories, labels }: Structure
           parentPerWallet.set(walletId, row.id);
         }
       }
+
+      // A label with no exclusions means "every wallet". When only one wallet
+      // is targeted, every other wallet has to be listed as excluded or the
+      // label claims a scope its rows do not have.
+      const excluded = input.wallet
+        ? (await wallets()).map((w) => w.id).filter((id) => !walletIds.includes(id))
+        : [];
 
       const items: CategoryItem[] = [];
       const created: string[] = [];
@@ -171,6 +190,7 @@ export function createStructure({ push, wallets, categories, labels }: Structure
             icon,
             type,
             categoryIds: created,
+            excludedWalletIds: excluded,
             ...(parentLabelId ? { parentId: parentLabelId } : {}),
           },
           1,
@@ -181,14 +201,16 @@ export function createStructure({ push, wallets, categories, labels }: Structure
 
     /** Renames or reicons every per-wallet row and the label together. */
     async editCategory(id: string, patch: CategoryPatch): Promise<void> {
-      const all = await labels();
-      const label = all.find((l) => l.id === id) ?? (await labelFor(id));
+      const label = await labelFor(id);
       const rows = (await categories()).filter((c) => label.categoryIds.includes(c.id));
       if (rows.length === 0) throw new MoneyLoverError(`category ${id} has no wallet rows`);
       const name = patch.name ?? label.name;
       const icon = patch.icon ?? label.icon;
       const type: 1 | 2 = label.type === "income" ? 1 : 2;
 
+      // A category push is a full replace too, so the parent link and the
+      // group have to be resent — rebuilding from name and icon alone silently
+      // unnests every row while the label still claims the old parent.
       await push(
         "category",
         rows.map<CategoryItem>((row) => ({
@@ -200,8 +222,9 @@ export function createStructure({ push, wallets, categories, labels }: Structure
           // Built-ins carry semantic markers here; blanking them changes how
           // the app treats the category.
           md: row.metadata ?? "",
-          gr: 0,
+          gr: row.group ?? 0,
           id: ++localId,
+          ...(row.parentId ? { pi: row.parentId } : {}),
           f: 2,
           version: 0,
         })),
@@ -211,8 +234,7 @@ export function createStructure({ push, wallets, categories, labels }: Structure
 
     /** Removes every per-wallet row and the label. Transactions are not moved. */
     async deleteCategory(id: string): Promise<void> {
-      const all = await labels();
-      const label = all.find((l) => l.id === id) ?? (await labelFor(id));
+      const label = await labelFor(id);
       if ((await labels()).some((l) => l.parentId === label.id)) {
         throw new MoneyLoverError(
           `${label.name} is a parent of other categories — delete or reparent those first`,
@@ -230,8 +252,9 @@ export function createStructure({ push, wallets, categories, labels }: Structure
           ic: row.icon,
           t: type,
           md: row.metadata ?? "",
-          gr: 0,
+          gr: row.group ?? 0,
           id: ++localId,
+          ...(row.parentId ? { pi: row.parentId } : {}),
           f: 3,
           version: 1,
           isDelete: true,

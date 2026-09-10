@@ -262,3 +262,41 @@ describe("createClient — lending", () => {
     assert.deepEqual(await createClient({ use: fakeBackend().backend }).labels(), []);
   });
 });
+
+describe("createClient — retag", () => {
+  it("does nothing for an empty plan", async () => {
+    const fake = fakeBackend();
+    assert.equal(await createClient({ use: fake.backend }).retag([]), 0);
+    assert.equal(fake.calls.edit, 0);
+  });
+
+  /** Without batching this is thousands of round trips, so it must be used. */
+  it("uses the backend's batch path when there is one", async () => {
+    const fake = fakeBackend([aTransaction({ id: "a" }), aTransaction({ id: "b" })]);
+    let batched: number | undefined;
+    const backend = {
+      ...fake.backend,
+      retagTransactions: async (plan: { id: string; category: string }[]) => {
+        batched = plan.length;
+        return plan.length;
+      },
+    };
+    const written = await createClient({ use: backend }).retag([
+      { id: "a", category: "Groceries" },
+      { id: "b", category: "Groceries" },
+    ]);
+    assert.equal(written, 2);
+    assert.equal(batched, 2);
+    assert.equal(fake.calls.edit, 0, "must not fall back to one-at-a-time");
+  });
+
+  it("falls back to sequential edits when the backend cannot batch", async () => {
+    const fake = fakeBackend([aTransaction({ id: "a" }), aTransaction({ id: "b" })]);
+    const written = await createClient({ use: fake.backend }).retag([
+      { id: "a", category: "Groceries" },
+      { id: "b", category: "Groceries" },
+    ]);
+    assert.equal(written, 2);
+    assert.equal(fake.calls.edit, 2);
+  });
+});

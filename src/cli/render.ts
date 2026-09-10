@@ -76,20 +76,31 @@ export function lending(rows: PersonBalance[]): void {
     console.log("no lending activity found");
     return;
   }
+  // Only worth a column when the account actually spans currencies.
+  const currencies = new Set(rows.map((r) => r.currencyId));
+  const multi = currencies.size > 1;
+
   console.log(
-    `${"person".padEnd(24)}${"lent".padStart(12)}${"collected".padStart(12)}` +
-      `${"outstanding".padStart(14)}${"you owe".padStart(12)}`,
+    `${"person".padEnd(24)}${multi ? "cur".padStart(6) : ""}${"lent".padStart(12)}` +
+      `${"collected".padStart(12)}${"outstanding".padStart(14)}${"you owe".padStart(12)}`,
   );
   for (const r of rows) {
     console.log(
       r.person.padEnd(24) +
+        (multi ? String(r.currencyId).padStart(6) : "") +
         r.lent.toFixed(2).padStart(12) +
         r.collected.toFixed(2).padStart(12) +
         r.outstanding.toFixed(2).padStart(14) +
         r.owing.toFixed(2).padStart(12),
     );
   }
-  const owed = rows.reduce((sum, r) => sum + r.outstanding, 0);
-  const owing = rows.reduce((sum, r) => sum + r.owing, 0);
-  console.log(`\nowed to you ${owed.toFixed(2)}   you owe ${owing.toFixed(2)}`);
+
+  // Totals per currency, because adding across them would be meaningless.
+  for (const currencyId of [...currencies].sort((a, b) => a - b)) {
+    const mine = rows.filter((r) => r.currencyId === currencyId);
+    const owed = mine.reduce((sum, r) => sum + r.outstanding, 0);
+    const owing = mine.reduce((sum, r) => sum + r.owing, 0);
+    const tag = multi ? ` (currency ${currencyId})` : "";
+    console.log(`\nowed to you ${owed.toFixed(2)}   you owe ${owing.toFixed(2)}${tag}`);
+  }
 }

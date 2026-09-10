@@ -27,6 +27,7 @@ import type {
   NewCategory,
   NewTransaction,
   NewWallet,
+  RetagEntry,
   Transaction,
   TransactionPatch,
   TransactionQuery,
@@ -64,6 +65,11 @@ export interface MoneyLover {
   addTransaction(input: NewTransaction): Promise<Transaction>;
   editTransaction(id: string, patch: TransactionPatch): Promise<Transaction>;
   deleteTransaction(id: string): Promise<Transaction>;
+  /**
+   * Recategorise many transactions. Batched into few requests where the
+   * backend supports it, otherwise one edit at a time.
+   */
+  retag(plan: RetagEntry[]): Promise<number>;
 
   addWallet(input: NewWallet): Promise<Wallet>;
   editWallet(wallet: string, patch: WalletPatch): Promise<Wallet>;
@@ -164,6 +170,23 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       return row;
     },
 
+    async retag(plan: RetagEntry[]): Promise<number> {
+      if (plan.length === 0) return 0;
+      const batched = backend.retagTransactions;
+      if (batched) {
+        const written = await batched.call(backend, plan);
+        cache.drop("transactions");
+        return written;
+      }
+      // No batching here, so this is thousands of round trips. Sequential on
+      // purpose: the API resets the connection under concurrency.
+      for (const { id, category } of plan) {
+        await backend.editTransaction(id, { category });
+      }
+      cache.drop("transactions");
+      return plan.length;
+    },
+
     async recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction> {
       if (input.amount <= 0) {
         throw new MoneyLoverError(
@@ -186,7 +209,8 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     },
 
     async lending(person?: string): Promise<PersonBalance[]> {
-      return lendingSummary(await allTransactions(), await categories(), person);
+      const currencyOf = new Map((await wallets()).map((w) => [w.id, w.currencyId]));
+      return lendingSummary(await allTransactions(), await categories(), person, currencyOf);
     },
   };
 }

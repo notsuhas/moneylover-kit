@@ -35,6 +35,7 @@ export {
   type Label,
   MoneyLoverError,
   type NewTransaction,
+  type RetagEntry,
   type Transaction,
   type TransactionPatch,
   type TransactionQuery,

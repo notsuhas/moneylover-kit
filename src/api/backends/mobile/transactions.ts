@@ -15,11 +15,8 @@ import { day } from "../../../core/normalise.js";
  * replace, so these extras have to survive an edit rather than be dropped.
  */
 interface RawTransaction extends WireTransaction {
-  images?: string[];
-  mark_report?: boolean;
-  remind?: number;
-  latitude?: number;
-  longtitude?: number;
+  /** Owned by the official client. Resent verbatim, never regenerated. */
+  metadata?: string;
 }
 
 export type { RawTransaction };
@@ -66,7 +63,10 @@ export function itemFrom(row: RawTransaction, categoryId: string, f: 1 | 2 | 3):
     im: row.images ?? [],
     la: row.latitude ?? 0,
     lo: row.longtitude ?? 0,
-    md: "{}",
+    // Whatever the official client put here, unchanged. Rebuilding this as
+    // "{}" silently destroyed anything the app was tracking on the row.
+    // "{}" is only the fallback when the row genuinely has none.
+    md: row.metadata ?? "{}",
     mr: Boolean(row.mark_report),
     n: row.note ?? "",
     p: row.with ?? [],

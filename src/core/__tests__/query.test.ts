@@ -177,3 +177,50 @@ describe("signedAmount", () => {
     assert.throws(() => signedAmount(0, "expense"), MoneyLoverError);
   });
 });
+
+describe("categoryIndex — income and expense namesakes", () => {
+  /**
+   * Money Lover ships two categories called "Uncategorized", one per
+   * direction. Keying only on the name picked whichever was listed first,
+   * which attaches the wrong metadata to a row.
+   */
+  const categories = [
+    aCategory({ id: "exp", name: "Uncategorized", metadata: "IS_UNCATEGORIZED_EXPENSE" }),
+    aCategory({
+      id: "inc",
+      name: "Uncategorized",
+      type: "income",
+      metadata: "IS_UNCATEGORIZED_INCOME",
+    }),
+  ];
+  const lookup = categoryIndex(categories);
+
+  it("picks the expense one for an expense row", () => {
+    const hit = lookup(
+      aTransaction({
+        id: "t",
+        categoryId: "scoped",
+        categoryName: "Uncategorized",
+        type: "expense",
+      }),
+    );
+    assert.equal(hit?.metadata, "IS_UNCATEGORIZED_EXPENSE");
+  });
+
+  it("picks the income one for an income row", () => {
+    const hit = lookup(
+      aTransaction({
+        id: "t",
+        categoryId: "scoped",
+        categoryName: "Uncategorized",
+        type: "income",
+        amount: 100,
+      }),
+    );
+    assert.equal(hit?.metadata, "IS_UNCATEGORIZED_INCOME");
+  });
+
+  it("still prefers an exact id match over the name", () => {
+    assert.equal(lookup(aTransaction({ id: "t", categoryId: "inc" }))?.id, "inc");
+  });
+});

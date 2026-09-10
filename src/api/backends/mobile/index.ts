@@ -16,6 +16,7 @@ import {
   type WireWallet,
 } from "../../../core/normalise.js";
 import { findCategory, findWallet, signedAmount } from "../../../core/query.js";
+import type { RetagEntry } from "../../../core/types.js";
 import {
   type Account,
   type Backend,
@@ -42,6 +43,9 @@ interface RawCategory {
   metadata?: string;
   account: { _id: string };
   isDelete?: boolean;
+  /** Nesting, per wallet. A full-replace edit has to resend this. */
+  parent?: { _id: string } | null;
+  group?: number;
 }
 
 interface RawLabel {
@@ -96,6 +100,8 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
           // The id a transaction must use depends on this. See docs/traps.md.
           walletId: c.account._id,
           metadata: c.metadata,
+          ...(c.parent?._id ? { parentId: c.parent._id } : {}),
+          ...(c.group !== undefined ? { group: c.group } : {}),
         }));
     },
 
@@ -167,6 +173,27 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
       if (patch.eventId !== undefined) item.cp = patch.eventId ? [patch.eventId] : [];
       if (patch.excludeReport !== undefined) item.er = patch.excludeReport;
       await push("transaction", [item]);
+    },
+
+    /**
+     * One push for the whole plan, in batches. Editing thousands of rows one
+     * request at a time takes hours; this is what a bulk recategorisation
+     * actually needs.
+     */
+    async retagTransactions(plan: RetagEntry[]): Promise<number> {
+      const rows = new Map(
+        (await pull<RawTransaction>("/api/sync/pull/transaction/v2"))
+          .filter((t) => !t.isDelete)
+          .map((t) => [t._id, t]),
+      );
+      const cats = await backend.categories();
+      const items = plan.map(({ id, category }) => {
+        const row = rows.get(id);
+        if (!row) throw new MoneyLoverError(`no transaction ${id}`);
+        const target = findCategory(cats, category, row.account._id);
+        return itemFrom(row, target.id, 2);
+      });
+      return push("transaction", items);
     },
 
     async deleteTransaction(id: string): Promise<void> {

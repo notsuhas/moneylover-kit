@@ -39,8 +39,12 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
     return method as NonNullable<T>;
   }
 
-  /** Structure writes change wallets, categories and labels together. */
-  const invalidate = () => cache.drop("wallets", "categories", "labels");
+  /**
+   * Structure writes change wallets, categories and labels together — and
+   * deleting a wallet deletes its transactions server-side, so a cached
+   * transaction list would keep returning rows that no longer exist.
+   */
+  const invalidate = () => cache.drop("wallets", "categories", "labels", "transactions");
 
   async function walletById(id: string): Promise<Wallet> {
     const hit = (await wallets()).find((w) => w.id === id);

@@ -42,18 +42,24 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
       title: "Who owes what",
       description:
         "Net lending position per person across every wallet: lent, collected, still " +
-        "outstanding, and separately what you owe them. Sorted by largest balance.",
+        "outstanding, and separately what you owe them. Sorted by largest balance. " +
+        "One row per person per currency — balances are never added across currencies.",
       inputSchema: {
         person: z.string().optional().describe("Substring match on the person tag"),
       },
     },
     async ({ person }) => {
       const rows = await client.lending(person);
-      return json({
-        people: rows,
-        totalOwedToYou: rows.reduce((sum, r) => sum + r.outstanding, 0),
-        totalYouOwe: rows.reduce((sum, r) => sum + r.owing, 0),
+      // Totals per currency: summing across them would invent an exchange rate.
+      const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {
+        const mine = rows.filter((r) => r.currencyId === currencyId);
+        return {
+          currencyId,
+          owedToYou: mine.reduce((sum, r) => sum + r.outstanding, 0),
+          youOwe: mine.reduce((sum, r) => sum + r.owing, 0),
+        };
       });
+      return json({ people: rows, totals });
     },
   );
 }

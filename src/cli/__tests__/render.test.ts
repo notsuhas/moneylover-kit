@@ -181,6 +181,7 @@ describe("lending", () => {
     render.lending([
       {
         person: "Sam",
+        currencyId: 11,
         lent: 5000,
         collected: 3000,
         outstanding: 2000,
@@ -191,6 +192,7 @@ describe("lending", () => {
       },
       {
         person: "Jordan",
+        currencyId: 11,
         lent: 0,
         collected: 0,
         outstanding: 0,

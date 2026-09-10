@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { lendingCategory, lendingKindOf, lendingSummary } from "../lending.js";
+import { lendingCategory, lendingKindOf, lendingSummary, splitMinorUnits } from "../lending.js";
 import { MoneyLoverError } from "../types.js";
 import { aCategory, aTransaction, lendingCategories as cats } from "./fixtures.js";
 
@@ -151,5 +151,71 @@ describe("lendingSummary", () => {
 
   it("returns nothing for an empty account", () => {
     assert.deepEqual(lendingSummary([], cats), []);
+  });
+});
+
+describe("splitMinorUnits", () => {
+  /** Rounding each share independently loses money: 100/3 → 99.99. */
+  it("distributes the remainder so shares sum to the original exactly", () => {
+    const shares = splitMinorUnits(100, 3);
+    assert.deepEqual(shares, [3334, 3333, 3333]);
+    assert.equal(
+      shares.reduce((a, b) => a + b, 0),
+      10000,
+    );
+  });
+
+  it("splits evenly when it divides", () => {
+    assert.deepEqual(splitMinorUnits(900, 3), [30000, 30000, 30000]);
+  });
+
+  it("handles one person", () => {
+    assert.deepEqual(splitMinorUnits(-42.5, 1), [4250]);
+  });
+
+  it("ignores the sign — direction comes from the lending kind", () => {
+    assert.deepEqual(splitMinorUnits(-100, 2), splitMinorUnits(100, 2));
+  });
+});
+
+describe("lendingSummary — currencies", () => {
+  const rows = [
+    aTransaction({ id: "1", categoryId: "loan", amount: -5000, walletId: "inr", people: ["Sam"] }),
+    aTransaction({ id: "2", categoryId: "loan", amount: -100, walletId: "usd", people: ["Sam"] }),
+  ];
+  const currencyOf = new Map([
+    ["inr", 11],
+    ["usd", 1],
+  ]);
+
+  /** Adding INR 5,000 to USD 100 to make 5,100 would be worse than useless. */
+  it("keeps one balance per person per currency", () => {
+    const summary = lendingSummary(rows, cats, undefined, currencyOf);
+    assert.equal(summary.length, 2);
+    const inr = summary.find((r) => r.currencyId === 11);
+    const usd = summary.find((r) => r.currencyId === 1);
+    assert.equal(inr?.lent, 5000);
+    assert.equal(usd?.lent, 100);
+  });
+
+  it("falls back to a single bucket when no currency map is given", () => {
+    const summary = lendingSummary(rows, cats);
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0]?.currencyId, 0);
+  });
+
+  it("splits a shared row without losing a paisa", () => {
+    const shared = [
+      aTransaction({
+        id: "1",
+        categoryId: "loan",
+        amount: -100,
+        walletId: "inr",
+        people: ["A", "B", "C"],
+      }),
+    ];
+    const summary = lendingSummary(shared, cats, undefined, currencyOf);
+    const total = summary.reduce((sum, r) => sum + r.lent, 0);
+    assert.equal(total, 100, "shares must sum back to the original");
   });
 });
