@@ -38,7 +38,7 @@
     "deadcode": "fallow dead-code",
     "verify": "npm run typecheck && npm run lint && prettier --check . && npm test && fallow dead-code && fallow dupes",
     "test": "tsc -p tsconfig.test.json && node --test '.test-build/src/**/__tests__/*.test.js'",
-    "prepare": "node ./node_modules/typescript/bin/tsc"
+    "prepare": "npx -y -p typescript@5.9 tsc"
   },
   "keywords": [
     "moneylover",
