@@ -33,7 +33,7 @@
     "prepublishOnly": "npm run build",
     "lint": "biome check src",
     "format": "biome check --write src && prettier --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "health": "fallow health",
     "deadcode": "fallow dead-code",
     "verify": "npm run typecheck && npm run lint && prettier --check . && npm test && fallow dead-code && fallow dupes",
