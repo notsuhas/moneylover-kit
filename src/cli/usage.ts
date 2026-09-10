@@ -53,6 +53,10 @@ Global
   --json                                machine-readable output
   --help
 
-Credentials come from MONEYLOVER_EMAIL and MONEYLOVER_PASSWORD, or
-MONEYLOVER_ACCESS_TOKEN to skip logging in. The token is cached, because every
-login registers a device and an account allows only a few at once.`;
+Credentials come from MONEYLOVER_EMAIL and MONEYLOVER_PASSWORD. Tokens are
+cached per API, because every login registers a device and an account allows
+only a few at once — once they are used up, further logins are refused.
+
+To supply tokens directly, use MONEYLOVER_WEB_TOKEN and MONEYLOVER_MOBILE_TOKEN:
+each API issues its own and rejects the other's. A single MONEYLOVER_ACCESS_TOKEN
+only works alongside --backend.`;
