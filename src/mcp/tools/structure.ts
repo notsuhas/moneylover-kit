@@ -1,0 +1,139 @@
+/**
+ * Wallet and category management over MCP.
+ *
+ * Off by default. These reshape the account rather than record something that
+ * happened, and deleting a wallet takes its transactions with it — not the
+ * blast radius you want on an endpoint reachable from the internet. Set
+ * MONEYLOVER_MCP_ALLOW_STRUCTURE=1 to register them.
+ */
+
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { MoneyLover } from "../../client/index.js";
+import { json } from "../present.js";
+
+/** Whether the structure tools should be registered at all. */
+export const structureAllowed = (): boolean => process.env.MONEYLOVER_MCP_ALLOW_STRUCTURE === "1";
+
+export function registerStructureTools(server: McpServer, client: MoneyLover): void {
+  server.registerTool(
+    "list_currencies_hint",
+    {
+      title: "How to name a currency",
+      description:
+        "Money Lover identifies a currency by a numeric id, not a code. This returns the " +
+        "ids already in use on this account, which is the reliable way to pick one for a " +
+        "new wallet.",
+      inputSchema: {},
+    },
+    async () => {
+      const seen = new Map<number, string[]>();
+      for (const w of await client.wallets()) {
+        const codes = Object.keys(w.balance ?? {});
+        seen.set(w.currencyId, [...new Set([...(seen.get(w.currencyId) ?? []), ...codes])]);
+      }
+      return json([...seen].map(([currencyId, codes]) => ({ currencyId, codes })));
+    },
+  );
+
+  server.registerTool(
+    "add_wallet",
+    {
+      title: "Create a wallet",
+      description:
+        "Create an account/wallet. The currency is a numeric id — use " +
+        "list_currencies_hint to find one already in use rather than guessing.",
+      inputSchema: {
+        name: z.string().min(1),
+        currencyId: z.number().int().describe("Money Lover's numeric currency id"),
+        icon: z.string().optional(),
+      },
+    },
+    async (args) => json({ created: await client.addWallet(args) }),
+  );
+
+  server.registerTool(
+    "edit_wallet",
+    {
+      title: "Rename or reicon a wallet",
+      description:
+        "Change a wallet's name, icon or currency. Balances and transactions are untouched.",
+      inputSchema: {
+        wallet: z.string().describe("Current wallet name"),
+        name: z.string().optional(),
+        icon: z.string().optional(),
+        currencyId: z.number().int().optional(),
+      },
+    },
+    async ({ wallet, ...patch }) => {
+      if (Object.values(patch).every((v) => v === undefined)) {
+        throw new Error("nothing to change — pass a name, icon or currencyId");
+      }
+      return json({ updated: await client.editWallet(wallet, patch) });
+    },
+  );
+
+  server.registerTool(
+    "delete_wallet",
+    {
+      title: "Delete a wallet",
+      description:
+        "Delete a wallet AND every transaction in it. This cannot be undone and it is not " +
+        "a small change — confirm the wallet and its balance with the user first.",
+      inputSchema: { wallet: z.string().describe("Wallet name, spelled out") },
+    },
+    async ({ wallet }) => json({ deleted: await client.deleteWallet(wallet) }),
+  );
+
+  server.registerTool(
+    "add_category",
+    {
+      title: "Create a category",
+      description:
+        "Create a category. Omit `wallet` to create it in every wallet, and pass `parent` " +
+        "to nest it under an existing one — both need the mobile backend, because that " +
+        "shape lives in a layer the web API does not model.",
+      inputSchema: {
+        name: z.string().min(1),
+        type: z.enum(["income", "expense"]),
+        wallet: z.string().optional().describe("Omit for every wallet (mobile backend)"),
+        parent: z.string().optional().describe("Parent category name (mobile backend)"),
+        icon: z.string().optional(),
+      },
+    },
+    async (args) => json({ created: await client.addCategory(args) }),
+  );
+
+  server.registerTool(
+    "edit_category",
+    {
+      title: "Rename or reicon a category",
+      description:
+        "Rename a category, or change its icon. Transactions keep pointing at it. On the " +
+        "mobile backend this updates every wallet's copy together.",
+      inputSchema: {
+        category: z.string().describe("Current category name"),
+        name: z.string().optional(),
+        icon: z.string().optional(),
+      },
+    },
+    async ({ category, ...patch }) => {
+      if (Object.values(patch).every((v) => v === undefined)) {
+        throw new Error("nothing to change — pass a name or icon");
+      }
+      return json({ updated: await client.editCategory(category, patch) });
+    },
+  );
+
+  server.registerTool(
+    "delete_category",
+    {
+      title: "Delete a category",
+      description:
+        "Delete a category. Transactions that used it are left alone and will show as " +
+        "uncategorised, so retag them first if that matters.",
+      inputSchema: { category: z.string() },
+    },
+    async ({ category }) => json({ deleted: await client.deleteCategory(category) }),
+  );
+}

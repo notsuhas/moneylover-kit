@@ -1,0 +1,192 @@
+/**
+ * The composition root: one object that hides which backend is in use.
+ *
+ * The CLI and the MCP server are both thin layers over this, so neither can do
+ * anything the library cannot.
+ */
+
+import type { AuthOptions } from "../api/auth.js";
+import { createMobileBackend } from "../api/backends/mobile/index.js";
+import { createWebBackend } from "../api/backends/web/index.js";
+import {
+  type LendingInput,
+  type LendingKind,
+  lendingCategory,
+  lendingSummary,
+  type PersonBalance,
+} from "../core/lending.js";
+import { categoryIndex, filterTransactions, findWallet } from "../core/query.js";
+import type {
+  Backend,
+  BackendName,
+  Capabilities,
+  Category,
+  CategoryPatch,
+  Event,
+  Label,
+  NewCategory,
+  NewTransaction,
+  NewWallet,
+  Transaction,
+  TransactionPatch,
+  TransactionQuery,
+  Wallet,
+  WalletPatch,
+} from "../core/types.js";
+import { MoneyLoverError } from "../core/types.js";
+import { type Cache, createCache } from "./cache.js";
+import { createStructureApi } from "./structure.js";
+
+export interface ClientOptions extends Omit<AuthOptions, "backend"> {
+  /** Defaults to `web`, or MONEYLOVER_BACKEND. */
+  backend?: BackendName;
+  /** Use this backend instead of constructing one. The seam for testing. */
+  use?: Backend;
+  /** Seconds to reuse a read. Writes invalidate regardless. 0 disables. */
+  cacheSeconds?: number;
+}
+
+export interface MoneyLover {
+  readonly backend: BackendName;
+  /** What this backend can do. Check before offering a structure write. */
+  readonly can: Capabilities;
+
+  account(): ReturnType<Backend["account"]>;
+  wallets(): Promise<Wallet[]>;
+  categories(): Promise<Category[]>;
+  events(): Promise<Event[]>;
+  /** Global, nestable category records. Empty where the backend has no such layer. */
+  labels(): Promise<Label[]>;
+
+  transactions(query?: TransactionQuery): Promise<Transaction[]>;
+  /** One row by id. Throws if it does not exist. */
+  transaction(id: string): Promise<Transaction>;
+  addTransaction(input: NewTransaction): Promise<Transaction>;
+  editTransaction(id: string, patch: TransactionPatch): Promise<Transaction>;
+  deleteTransaction(id: string): Promise<Transaction>;
+
+  addWallet(input: NewWallet): Promise<Wallet>;
+  editWallet(wallet: string, patch: WalletPatch): Promise<Wallet>;
+  deleteWallet(wallet: string): Promise<Wallet>;
+  /** Omit `wallet` to create it in every wallet; pass `parent` to nest it. */
+  addCategory(input: NewCategory): Promise<Category>;
+  editCategory(category: string, patch: CategoryPatch): Promise<Category>;
+  deleteCategory(category: string): Promise<Category>;
+
+  /** Record a loan, collection, borrowing or repayment against a person. */
+  recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction>;
+  /** Net position per person, across every wallet. */
+  lending(person?: string): Promise<PersonBalance[]>;
+}
+
+function resolveBackend(options: ClientOptions): Backend {
+  if (options.use) return options.use;
+  const name = options.backend ?? (process.env.MONEYLOVER_BACKEND as BackendName) ?? "web";
+  if (name === "mobile") return createMobileBackend(options);
+  if (name === "web") return createWebBackend(options);
+  throw new MoneyLoverError(`unknown backend ${JSON.stringify(name)} — use "web" or "mobile"`);
+}
+
+export function createClient(options: ClientOptions = {}): MoneyLover {
+  const backend = resolveBackend(options);
+  const cache: Cache = createCache(options.cacheSeconds ?? 60);
+
+  const wallets = () => cache.read("wallets", () => backend.wallets());
+  const categories = () => cache.read("categories", () => backend.categories());
+  const allTransactions = () => cache.read("transactions", () => backend.transactions());
+
+  async function transaction(id: string): Promise<Transaction> {
+    const row = (await allTransactions()).find((t) => t.id === id);
+    if (!row) throw new MoneyLoverError(`no transaction ${id}`);
+    return row;
+  }
+
+  /** Re-read after a write, so callers always see committed state. */
+  async function reread(id: string): Promise<Transaction> {
+    cache.drop("transactions");
+    return transaction(id);
+  }
+
+  const structure = createStructureApi({ backend, cache, wallets, categories });
+
+  return {
+    backend: backend.name,
+    can: backend.can,
+    account: () => cache.read("account", () => backend.account()),
+    wallets,
+    categories,
+    events: () => cache.read("events", () => backend.events()),
+    labels: () => cache.read("labels", () => backend.labels?.() ?? Promise.resolve([])),
+    ...structure,
+
+    async transactions(query: TransactionQuery = {}): Promise<Transaction[]> {
+      const { wallet, category, ...rest } = query;
+      let scoped = await allTransactions();
+
+      if (wallet) {
+        const id = findWallet(await wallets(), wallet).id;
+        scoped = scoped.filter((t) => t.walletId === id);
+      }
+      if (category) {
+        const all = await categories();
+        const wanted = new Set(
+          all
+            .filter((c) => c.id === category || c.name.toLowerCase() === category.toLowerCase())
+            .map((c) => c.name.toLowerCase()),
+        );
+        if (wanted.size === 0) {
+          throw new MoneyLoverError(`no category ${JSON.stringify(category)}`);
+        }
+        const lookup = categoryIndex(all);
+        scoped = scoped.filter((t) => {
+          const name = lookup(t)?.name ?? t.categoryName;
+          return name ? wanted.has(name.toLowerCase()) : false;
+        });
+      }
+      return filterTransactions(scoped, rest);
+    },
+
+    transaction,
+
+    async addTransaction(input: NewTransaction): Promise<Transaction> {
+      return reread(await backend.addTransaction(input));
+    },
+
+    async editTransaction(id: string, patch: TransactionPatch): Promise<Transaction> {
+      await backend.editTransaction(id, patch);
+      return reread(id);
+    },
+
+    async deleteTransaction(id: string): Promise<Transaction> {
+      const row = await transaction(id);
+      await backend.deleteTransaction(id);
+      cache.drop("transactions");
+      return row;
+    },
+
+    async recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction> {
+      if (input.amount <= 0) {
+        throw new MoneyLoverError(
+          `amount must be positive — \`${kind}\` already sets the direction`,
+        );
+      }
+      const wallet = findWallet(await wallets(), input.wallet);
+      const category = lendingCategory(await categories(), kind, wallet.id);
+      const outgoing = category.type === "expense";
+      return reread(
+        await backend.addTransaction({
+          wallet: wallet.id,
+          category: category.id,
+          amount: outgoing ? -input.amount : input.amount,
+          people: [input.person],
+          ...(input.note !== undefined ? { note: input.note } : {}),
+          ...(input.date !== undefined ? { date: input.date } : {}),
+        }),
+      );
+    },
+
+    async lending(person?: string): Promise<PersonBalance[]> {
+      return lendingSummary(await allTransactions(), await categories(), person);
+    },
+  };
+}

@@ -1,0 +1,1345 @@
+{
+ "budget/list/all": {
+  "request": {},
+  "msg": "budget_list_success",
+  "action": "budget_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "category": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "name": {
+        "type": "string"
+       },
+       "icon": {
+        "type": "string"
+       },
+       "type": {
+        "type": "integer"
+       },
+       "id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       }
+      }
+     },
+     "amount": {
+      "type": "integer"
+     },
+     "account": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "name": {
+        "type": "string"
+       },
+       "currency_id": {
+        "type": "integer"
+       },
+       "account_type": {
+        "type": "integer"
+       },
+       "exclude_total": {
+        "type": "boolean"
+       },
+       "icon": {
+        "type": "string"
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       }
+      }
+     },
+     "start_date": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "end_date": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "isRepeat": {
+      "type": "boolean"
+     },
+     "expenseTransactions": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "_id": {
+         "type": "string",
+         "description": "32-char uppercase hex id"
+        },
+        "note": {
+         "type": "string"
+        },
+        "account": {
+         "type": "object",
+         "properties": {
+          "_id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "name": {
+           "type": "string"
+          },
+          "currency_id": {
+           "type": "integer"
+          },
+          "account_type": {
+           "type": "integer"
+          },
+          "icon": {
+           "type": "string"
+          }
+         }
+        },
+        "category": {
+         "type": "object",
+         "properties": {
+          "_id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "name": {
+           "type": "string"
+          },
+          "icon": {
+           "type": "string"
+          },
+          "account": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "type": {
+           "type": "integer"
+          },
+          "metadata": {
+           "type": "string"
+          },
+          "id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          }
+         }
+        },
+        "amount": {
+         "type": "integer"
+        },
+        "lastEditBy": {
+         "type": "object",
+         "properties": {
+          "_id": {
+           "type": "string",
+           "description": "ObjectId hex"
+          },
+          "email": {
+           "type": "string"
+          }
+         }
+        },
+        "longtitude": {
+         "type": "integer"
+        },
+        "latitude": {
+         "type": "integer"
+        },
+        "displayDate": {
+         "type": "string",
+         "format": "date-time"
+        },
+        "remind": {
+         "type": "integer"
+        },
+        "metadata": {
+         "type": "string"
+        },
+        "images": {
+         "type": "array",
+         "items": {}
+        },
+        "exclude_report": {
+         "type": "boolean"
+        },
+        "createdAt": {
+         "type": "string",
+         "format": "date-time"
+        },
+        "campaign": {
+         "type": "array",
+         "items": {}
+        },
+        "with": {
+         "type": "array",
+         "items": {}
+        },
+        "currency_code": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "7/7",
+   "category": "7/7",
+   "amount": "7/7",
+   "account": "7/7",
+   "start_date": "7/7",
+   "end_date": "7/7",
+   "isRepeat": "7/7",
+   "expenseTransactions": "7/7"
+  },
+  "count": 7
+ },
+ "category/list-all": {
+  "request": {},
+  "msg": "get_cate_success",
+  "action": "category_list_all",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "name": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "type": {
+      "type": "integer"
+     },
+     "metadata": {
+      "type": "string"
+     },
+     "exclude_accounts": {
+      "type": "array",
+      "items": {}
+     },
+     "parent": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "account": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "group": {
+      "type": "integer"
+     },
+     "id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "400/400",
+   "name": "400/400",
+   "icon": "400/400",
+   "type": "400/400",
+   "metadata": "400/400",
+   "exclude_accounts": "400/400",
+   "account": "400/400",
+   "group": "400/400",
+   "id": "400/400",
+   "parent": "185/400"
+  },
+  "count": 584
+ },
+ "category/list": {
+  "request": {
+   "walletId": "<walletId>"
+  },
+  "msg": "get_cate_success",
+  "action": "category_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "name": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "account": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "type": {
+      "type": "integer"
+     },
+     "metadata": {
+      "type": "string"
+     },
+     "group": {
+      "type": "integer"
+     },
+     "id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "44/44",
+   "name": "44/44",
+   "icon": "44/44",
+   "account": "44/44",
+   "type": "44/44",
+   "metadata": "44/44",
+   "group": "44/44",
+   "id": "44/44"
+  },
+  "count": 44
+ },
+ "debt/list/all": {
+  "request": {},
+  "msg": "debt_list_success",
+  "action": "debt_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "parent": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "_id": {
+         "type": "string",
+         "description": "32-char uppercase hex id"
+        },
+        "note": {
+         "type": "string"
+        },
+        "account": {
+         "type": "object",
+         "properties": {
+          "_id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "name": {
+           "type": "string"
+          },
+          "currency_id": {
+           "type": "integer"
+          },
+          "account_type": {
+           "type": "integer"
+          },
+          "icon": {
+           "type": "string"
+          }
+         }
+        },
+        "category": {
+         "type": "object",
+         "properties": {
+          "_id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "name": {
+           "type": "string"
+          },
+          "icon": {
+           "type": "string"
+          },
+          "account": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          },
+          "type": {
+           "type": "integer"
+          },
+          "metadata": {
+           "type": "string"
+          },
+          "id": {
+           "type": "string",
+           "description": "32-char uppercase hex id"
+          }
+         }
+        },
+        "amount": {
+         "type": "integer"
+        },
+        "lastEditBy": {
+         "type": "string",
+         "description": "ObjectId hex"
+        },
+        "longtitude": {
+         "type": "integer"
+        },
+        "latitude": {
+         "type": "integer"
+        },
+        "displayDate": {
+         "type": "string",
+         "format": "date-time"
+        },
+        "remind": {
+         "type": "integer"
+        },
+        "metadata": {
+         "type": "string"
+        },
+        "images": {
+         "type": "array",
+         "items": {}
+        },
+        "exclude_report": {
+         "type": "boolean"
+        },
+        "createdAt": {
+         "type": "string",
+         "format": "date-time"
+        },
+        "campaign": {
+         "type": "array",
+         "items": {}
+        },
+        "with": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "with": {
+      "type": "string"
+     },
+     "children": {
+      "type": "array",
+      "items": {}
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "parent": "67/67",
+   "with": "67/67",
+   "children": "67/67"
+  },
+  "count": 67
+ },
+ "event/list/all": {
+  "request": {},
+  "msg": "event_list_success",
+  "action": "event_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "name": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "start_amount": {
+      "type": "integer"
+     },
+     "goal_amount": {
+      "type": "integer"
+     },
+     "type": {
+      "type": "integer"
+     },
+     "status": {
+      "type": "boolean"
+     },
+     "end_date": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "currency_id": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "15/15",
+   "name": "15/15",
+   "icon": "15/15",
+   "start_amount": "15/15",
+   "goal_amount": "15/15",
+   "type": "15/15",
+   "status": "15/15",
+   "currency_id": "15/15",
+   "end_date": "13/15"
+  },
+  "count": 15
+ },
+ "icon/download": {
+  "request": {},
+  "msg": "get_list_icon_download_success",
+  "action": "icon_download_list",
+  "schema": {
+   "type": "array",
+   "items": {}
+  },
+  "count": 0
+ },
+ "linked/provider": {
+  "request": {},
+  "msg": "get_provider_success",
+  "action": null,
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "primary_color": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     },
+     "country_code": {
+      "type": "string"
+     },
+     "has_balance": {
+      "type": "boolean"
+     },
+     "meta_search": {
+      "type": "string"
+     },
+     "is_free": {
+      "type": "boolean"
+     },
+     "is_debug": {
+      "type": "boolean"
+     },
+     "otp": {
+      "type": "boolean"
+     },
+     "browser": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "id": "55/55",
+   "name": "55/55",
+   "icon": "55/55",
+   "primary_color": "55/55",
+   "type": "55/55",
+   "country_code": "55/55",
+   "has_balance": "55/55",
+   "meta_search": "55/55",
+   "is_free": "55/55",
+   "is_debug": "55/55",
+   "otp": "55/55",
+   "browser": "55/55"
+  },
+  "count": 55
+ },
+ "transaction/config-search": {
+  "request": {},
+  "msg": "get_config_transaction_success",
+  "action": "transaction_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "category": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "name": {
+        "type": "string"
+       },
+       "icon": {
+        "type": "string"
+       },
+       "metadata": {
+        "type": "string"
+       },
+       "type": {
+        "type": "integer"
+       },
+       "id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       }
+      }
+     },
+     "amount": {
+      "type": "number"
+     },
+     "address": {
+      "type": "string"
+     },
+     "longtitude": {
+      "type": "integer"
+     },
+     "latitude": {
+      "type": "integer"
+     },
+     "with": {
+      "type": "array",
+      "items": {}
+     },
+     "owner": {
+      "type": "string",
+      "description": "ObjectId hex"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "400/400",
+   "category": "400/400",
+   "amount": "400/400",
+   "address": "400/400",
+   "longtitude": "400/400",
+   "latitude": "400/400",
+   "with": "400/400",
+   "owner": "400/400"
+  },
+  "count": 10510
+ },
+ "transaction/list-all": {
+  "request": {},
+  "msg": "get_full_transaction_success",
+  "action": "transaction_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "note": {
+      "type": "string"
+     },
+     "account": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "name": {
+        "type": "string"
+       },
+       "currency_id": {
+        "type": "integer"
+       },
+       "icon": {
+        "type": "string"
+       },
+       "account_type": {
+        "type": "integer"
+       },
+       "metadata": {
+        "type": "string"
+       }
+      }
+     },
+     "category": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "name": {
+        "type": "string"
+       },
+       "icon": {
+        "type": "string"
+       },
+       "metadata": {
+        "type": "string"
+       },
+       "type": {
+        "type": "integer"
+       },
+       "account": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       }
+      }
+     },
+     "amount": {
+      "type": "number"
+     },
+     "displayDate": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "remind": {
+      "type": "integer"
+     },
+     "address": {
+      "type": "string"
+     },
+     "longtitude": {
+      "type": "integer"
+     },
+     "latitude": {
+      "type": "integer"
+     },
+     "with": {
+      "type": "array",
+      "items": {}
+     },
+     "campaign": {
+      "type": "array",
+      "items": {}
+     },
+     "lastEditBy": {
+      "type": "string",
+      "description": "ObjectId hex"
+     },
+     "exclude_report": {
+      "type": "boolean"
+     },
+     "images": {
+      "type": "array",
+      "items": {}
+     },
+     "related": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "createdAt": {
+      "type": "string",
+      "format": "date-time"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "400/400",
+   "note": "400/400",
+   "account": "400/400",
+   "category": "400/400",
+   "amount": "400/400",
+   "displayDate": "400/400",
+   "remind": "400/400",
+   "address": "400/400",
+   "longtitude": "400/400",
+   "latitude": "400/400",
+   "with": "400/400",
+   "campaign": "400/400",
+   "lastEditBy": "400/400",
+   "exclude_report": "400/400",
+   "images": "400/400",
+   "createdAt": "400/400",
+   "related": "150/400"
+  },
+  "count": 11194
+ },
+ "transaction/list": {
+  "request": {
+   "walletId": "<walletId>",
+   "startDate": "2026-08-01",
+   "endDate": "2026-08-31"
+  },
+  "msg": "get_transaction_success",
+  "action": "transaction_list",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "daterange": {
+     "type": "object",
+     "properties": {
+      "startDate": {
+       "type": "string",
+       "format": "date"
+      },
+      "endDate": {
+       "type": "string",
+       "format": "date"
+      }
+     }
+    },
+    "transactions": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "_id": {
+        "type": "string",
+        "description": "32-char uppercase hex id"
+       },
+       "note": {
+        "type": "string"
+       },
+       "account": {
+        "type": "object",
+        "properties": {
+         "_id": {
+          "type": "string",
+          "description": "32-char uppercase hex id"
+         },
+         "name": {
+          "type": "string"
+         },
+         "currency_id": {
+          "type": "integer"
+         },
+         "account_type": {
+          "type": "integer"
+         },
+         "icon": {
+          "type": "string"
+         }
+        }
+       },
+       "category": {
+        "type": "object",
+        "properties": {
+         "_id": {
+          "type": "string",
+          "description": "32-char uppercase hex id"
+         },
+         "name": {
+          "type": "string"
+         },
+         "icon": {
+          "type": "string"
+         },
+         "type": {
+          "type": "integer"
+         },
+         "metadata": {
+          "type": "string"
+         },
+         "parent": {
+          "type": "object"
+         },
+         "categories": {
+          "type": "array",
+          "items": {}
+         },
+         "account": {
+          "type": "string",
+          "description": "32-char uppercase hex id"
+         }
+        }
+       },
+       "amount": {
+        "type": "number"
+       },
+       "displayDate": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "remind": {
+        "type": "integer"
+       },
+       "address": {
+        "type": "string"
+       },
+       "longtitude": {
+        "type": "integer"
+       },
+       "latitude": {
+        "type": "integer"
+       },
+       "with": {
+        "type": "array",
+        "items": {}
+       },
+       "campaign": {
+        "type": "array",
+        "items": {}
+       },
+       "lastEditBy": {
+        "type": "object",
+        "properties": {
+         "_id": {
+          "type": "string",
+          "description": "ObjectId hex"
+         },
+         "email": {
+          "type": "string"
+         }
+        }
+       },
+       "exclude_report": {
+        "type": "boolean"
+       },
+       "images": {
+        "type": "array",
+        "items": {}
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       }
+      }
+     }
+    }
+   }
+  },
+  "count": 2
+ },
+ "user/account": {
+  "request": {},
+  "msg": "get_list_device_success",
+  "action": "user_info_device",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "ObjectId hex"
+     },
+     "platform": {
+      "type": "integer"
+     },
+     "version": {
+      "type": "integer"
+     },
+     "deviceId": {
+      "type": "string"
+     },
+     "isDev": {
+      "type": "boolean"
+     },
+     "blockDevice": {
+      "type": "boolean"
+     },
+     "appId": {
+      "type": "integer"
+     },
+     "isDelete": {
+      "type": "boolean"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "createdDate": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "updateAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "name": {
+      "type": "string"
+     },
+     "uniqueCode": {
+      "type": "string"
+     },
+     "ip": {
+      "type": "string"
+     },
+     "owner": {
+      "type": "string",
+      "description": "ObjectId hex"
+     },
+     "tokenDevice": {
+      "type": "string"
+     },
+     "__v": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "7/7",
+   "name": "7/7",
+   "platform": "7/7",
+   "deviceId": "7/7",
+   "owner": "7/7",
+   "tokenDevice": "7/7",
+   "isDev": "7/7",
+   "blockDevice": "7/7",
+   "appId": "7/7",
+   "isDelete": "7/7",
+   "tags": "7/7",
+   "createdDate": "7/7",
+   "updateAt": "7/7",
+   "__v": "7/7",
+   "version": "3/7",
+   "ip": "3/7",
+   "uniqueCode": "2/7"
+  },
+  "count": 7
+ },
+ "user/info": {
+  "request": {},
+  "msg": "get_info_success",
+  "action": "user_info",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "_id": {
+     "type": "string",
+     "description": "ObjectId hex"
+    },
+    "email": {
+     "type": "string"
+    },
+    "tags": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "icon_package": {
+     "type": "array",
+     "items": {}
+    },
+    "limitDevice": {
+     "type": "integer"
+    },
+    "client_setting": {
+     "type": "object",
+     "properties": {
+      "update_password_fb": {
+       "type": "string"
+      },
+      "is_done_intro_money_insider_detail": {
+       "type": "boolean"
+      },
+      "is_done_intro_money_insider_home": {
+       "type": "boolean"
+      },
+      "sl": {
+       "type": "boolean"
+      },
+      "l": {
+       "type": "string"
+      },
+      "ol": {
+       "type": "boolean"
+      },
+      "is_done_intro_home": {
+       "type": "boolean"
+      },
+      "sd": {
+       "type": "boolean"
+      },
+      "sc": {
+       "type": "boolean"
+      },
+      "sa": {
+       "type": "boolean"
+      },
+      "ds": {
+       "type": "integer"
+      },
+      "ps": {
+       "type": "integer"
+      },
+      "df": {
+       "type": "integer"
+      },
+      "fd": {
+       "type": "integer"
+      },
+      "dr": {
+       "type": "integer"
+      },
+      "av": {
+       "type": "integer"
+      },
+      "pl": {
+       "type": "integer"
+      },
+      "fdw": {
+       "type": "integer"
+      },
+      "fmy": {
+       "type": "integer"
+      },
+      "er": {
+       "type": "boolean"
+      },
+      "sb": {
+       "type": "integer"
+      },
+      "om": {
+       "type": "integer"
+      },
+      "show_advance_add_transaction": {
+       "type": "boolean"
+      },
+      "future_period": {
+       "type": "integer"
+      },
+      "nps__last_ask": {
+       "type": "integer"
+      },
+      "su": {
+       "type": "boolean"
+      },
+      "main_currency": {
+       "type": "string"
+      },
+      "ob_step_closed": {
+       "type": "boolean"
+      },
+      "ob_step_create_wallet": {
+       "type": "boolean"
+      },
+      "is_show_step_view_for_user": {
+       "type": "boolean"
+      },
+      "ob_budget_suggest_show": {
+       "type": "boolean"
+      },
+      "ob_step_add_transaction": {
+       "type": "boolean"
+      },
+      "ob_step_get_it": {
+       "type": "boolean"
+      },
+      "ob_step_add_budget": {
+       "type": "boolean"
+      },
+      "segment_user_ui_type": {
+       "type": "integer"
+      },
+      "ls": {
+       "type": "integer"
+      },
+      "lw__banner_status2": {
+       "type": "boolean"
+      },
+      "is_done_tooltip_txn_ai_add_trans": {
+       "type": "boolean"
+      },
+      "is_done_tooltip_txn_ai_home": {
+       "type": "boolean"
+      },
+      "closed_sample_data_on_home": {
+       "type": "boolean"
+      }
+     }
+    },
+    "purchased": {
+     "type": "boolean"
+    },
+    "subscribeProduct": {
+     "type": "string"
+    },
+    "deviceId": {
+     "type": "string"
+    }
+   }
+  },
+  "count": 9
+ },
+ "wallet/awaiting-shared": {
+  "request": {},
+  "msg": "awaiting_shared_success",
+  "action": "awaiting_shared",
+  "schema": {
+   "type": "array",
+   "items": {}
+  },
+  "count": 0
+ },
+ "wallet/balance": {
+  "request": {
+   "walletId": "<walletId>"
+  },
+  "msg": "get_balance_success",
+  "action": "wallet_balance",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "_id": {
+     "type": "string",
+     "description": "32-char uppercase hex id"
+    },
+    "balance": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "INR": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   }
+  },
+  "count": 2
+ },
+ "wallet/list": {
+  "request": {},
+  "msg": "get_list_account_success",
+  "action": "wallet_list",
+  "schema": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "_id": {
+      "type": "string",
+      "description": "32-char uppercase hex id"
+     },
+     "name": {
+      "type": "string"
+     },
+     "currency_id": {
+      "type": "integer"
+     },
+     "owner": {
+      "type": "string",
+      "description": "ObjectId hex"
+     },
+     "isDelete": {
+      "type": "boolean"
+     },
+     "listUser": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "_id": {
+         "type": "string",
+         "description": "ObjectId hex"
+        },
+        "email": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "icon": {
+      "type": "string"
+     },
+     "exclude_total": {
+      "type": "boolean"
+     },
+     "account_type": {
+      "type": "integer"
+     },
+     "metadata": {
+      "type": "string"
+     },
+     "archived": {
+      "type": "boolean"
+     },
+     "transaction_notification": {
+      "type": "boolean"
+     },
+     "sortIndex": {
+      "type": "integer"
+     },
+     "updateAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "createdAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "balance": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "INR": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "key_frequency": {
+   "_id": "13/13",
+   "name": "13/13",
+   "currency_id": "13/13",
+   "owner": "13/13",
+   "sortIndex": "13/13",
+   "transaction_notification": "13/13",
+   "archived": "13/13",
+   "account_type": "13/13",
+   "exclude_total": "13/13",
+   "icon": "13/13",
+   "listUser": "13/13",
+   "createdAt": "13/13",
+   "updateAt": "13/13",
+   "isDelete": "13/13",
+   "balance": "13/13",
+   "metadata": "1/13"
+  },
+  "count": 13
+ }
+}

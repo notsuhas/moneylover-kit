@@ -1,0 +1,8 @@
+*
+!**/*.md
+!**/*.yaml
+!**/*.yml
+node_modules/
+dist/
+spec/web-openapi.yaml
+spec/web-observed-schemas.json

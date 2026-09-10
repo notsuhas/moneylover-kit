@@ -1,0 +1,62 @@
+{
+  "name": "moneylover-kit",
+  "version": "0.1.0",
+  "description": "Unofficial Money Lover client, CLI and MCP server. Full transaction CRUD.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "moneylover": "dist/cli/index.js",
+    "moneylover-mcp": "dist/mcp/stdio.js",
+    "moneylover-mcp-http": "dist/mcp/http.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./mcp": "./dist/mcp/server.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "spec",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "mcp": "node dist/mcp/stdio.js",
+    "mcp:http": "node dist/mcp/http.js",
+    "prepublishOnly": "npm run build",
+    "lint": "biome check src",
+    "format": "biome check --write src && prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "health": "fallow health",
+    "deadcode": "fallow dead-code",
+    "verify": "npm run typecheck && npm run lint && prettier --check . && npm test && fallow dead-code && fallow dupes",
+    "test": "tsc -p tsconfig.test.json && node --test '.test-build/src/**/__tests__/*.test.js'"
+  },
+  "keywords": [
+    "moneylover",
+    "money-lover",
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "finance",
+    "budget"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@types/node": "^22.20.2",
+    "fallow": "^3.24.1",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
+  }
+}

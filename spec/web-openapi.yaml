@@ -1,0 +1,2115 @@
+# Generated from live captures; see docs/moneylover-api.md
+openapi: 3.1.0
+info:
+  title: Money Lover Web API (unofficial)
+  version: 0.1.0
+  summary: Reverse engineered from the web.moneylover.me client, Sep 2026.
+  description: |-
+      Unofficial specification for the private API behind the Money Lover web app. Reverse engineered by capturing the client's own traffic and probing an 840-path candidate matrix against a real account.
+      
+      **Shape.** Every operation is `POST`, takes a JSON body (`{}` when it has no parameters), and answers `200` with a uniform envelope. HTTP status is not a reliable success signal — read `error` instead.
+      
+      **Quirks that will bite you.**
+      - `revoapi.moneylover.me` appears in the client config but rejects these calls with `error 706 Oauth expire`. The working host is `web.moneylover.me/api`, which proxies it.
+      - A request with **no** `Authorization` header returns `error: 0` and an **empty** `data` array rather than 401. Absence of data does not mean absence of data.
+      - Cloudflare blocks non-browser User-Agents; send a browser UA or requests fail before reaching the API.
+      - A malformed body returns an Express `body-parser` stack trace instead of the envelope.
+      - `error: 1` generally means the route exists but the payload was rejected — useful for discovery.
+      
+      **Four different response shapes.** A client must handle all of them:
+      1. Normal: `{error, msg, action, data}`.
+      2. Invalid token: `{s: false, e: 706, msg: "Not authorized error", router}` — note the **abbreviated keys**; code keying on `error` will not see this and may read `data` as undefined.
+      3. Missing `Authorization` header entirely: a normal envelope with `error: 0` and empty `data`. Silent.
+      4. Malformed JSON body: a raw Express `body-parser` stack trace.
+      
+      Not affiliated with or endorsed by Money Lover. This documents a private API for use against your own account; it can change without notice.
+      
+      **This surface is discovered, not complete.** A second probe pass found three more routes (`budget|debt|event/list/full`) that the first missed, and no endpoint for recurring transactions could be found at all despite that being a shipped feature — so more routes almost certainly exist under names not guessed here.
+      
+      **Known outage at time of writing.** Every route that mutates the transaction store (`transaction/add|edit|delete`, `category/add`) hangs and is cut off by Cloudflare with **HTTP 524** after ~125s — the origin never responds. Reads stay sub-second and the other write routes answer normally, so this is a fault at Money Lover's end, not a client or rate-limit issue. The transaction payloads below were captured while the endpoints were healthy.
+      
+      **Field naming is inconsistent across the API and this is the main source of wasted time.** Reads take `walletId`. `transaction/add|edit` take `account`. `category/add` takes `walletId`. And `transaction`'s `category` must be the id from `category/list-all`, never the one from `category/list`.
+      
+      **Coverage.** 15 read endpoints were each called successfully and their schemas inferred from real responses. The transaction write trio (`add`, `edit`, `delete`) was captured from the client and exercised end to end against a live account, then reverted — the ledger returned to a byte-identical transaction id list. Remaining write endpoints (wallet, category, event, budget) are confirmed to exist but their payloads were not captured.
+servers:
+  -
+    url: https://web.moneylover.me/api
+security:
+  -
+    AuthJWT: []
+tags:
+  -
+    name: user
+    description: Account profile and registered devices
+  -
+    name: wallet
+    description: Wallets (called accounts in the UI) and balances
+  -
+    name: transaction
+    description: Transactions — the bulk of the data
+  -
+    name: category
+    description: Category tree, per wallet or across all
+  -
+    name: event
+    description: Events, used for trips and campaigns
+  -
+    name: budget
+    description: Budgets and their matched transactions
+  -
+    name: debt
+    description: Debt and loan records grouped by person
+  -
+    name: linked
+    description: Bank-linking providers
+  -
+    name: icon
+    description: Icon packs
+  -
+    name: report
+    description: Reporting route; parameters unresolved
+paths:
+  "/user/info":
+    post:
+      operationId: user_info
+      summary: Current user profile
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `user_info`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          _id:
+                            type: string
+                            description: ObjectId hex
+                          email:
+                            type: string
+                          tags:
+                            type: array
+                            items:
+                              type: string
+                          icon_package:
+                            type: array
+                            items: {}
+                          limitDevice:
+                            type: integer
+                          client_setting:
+                            type: object
+                            properties:
+                              update_password_fb:
+                                type: string
+                              is_done_intro_money_insider_detail:
+                                type: boolean
+                              is_done_intro_money_insider_home:
+                                type: boolean
+                              sl:
+                                type: boolean
+                              l:
+                                type: string
+                              ol:
+                                type: boolean
+                              is_done_intro_home:
+                                type: boolean
+                              sd:
+                                type: boolean
+                              sc:
+                                type: boolean
+                              sa:
+                                type: boolean
+                              ds:
+                                type: integer
+                              ps:
+                                type: integer
+                              df:
+                                type: integer
+                              fd:
+                                type: integer
+                              dr:
+                                type: integer
+                              av:
+                                type: integer
+                              pl:
+                                type: integer
+                              fdw:
+                                type: integer
+                              fmy:
+                                type: integer
+                              er:
+                                type: boolean
+                              sb:
+                                type: integer
+                              om:
+                                type: integer
+                              show_advance_add_transaction:
+                                type: boolean
+                              future_period:
+                                type: integer
+                              nps__last_ask:
+                                type: integer
+                              su:
+                                type: boolean
+                              main_currency:
+                                type: string
+                              ob_step_closed:
+                                type: boolean
+                              ob_step_create_wallet:
+                                type: boolean
+                              is_show_step_view_for_user:
+                                type: boolean
+                              ob_budget_suggest_show:
+                                type: boolean
+                              ob_step_add_transaction:
+                                type: boolean
+                              ob_step_get_it:
+                                type: boolean
+                              ob_step_add_budget:
+                                type: boolean
+                              segment_user_ui_type:
+                                type: integer
+                              ls:
+                                type: integer
+                              lw__banner_status2:
+                                type: boolean
+                              is_done_tooltip_txn_ai_add_trans:
+                                type: boolean
+                              is_done_tooltip_txn_ai_home:
+                                type: boolean
+                              closed_sample_data_on_home:
+                                type: boolean
+                          purchased:
+                            type: boolean
+                          subscribeProduct:
+                            type: string
+                          deviceId:
+                            type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 9 records on the reference account.
+  "/user/account":
+    post:
+      operationId: user_account
+      summary: Devices registered to the account
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `user_info_device`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: ObjectId hex
+                            platform:
+                              type: integer
+                            version:
+                              type: integer
+                            deviceId:
+                              type: string
+                            isDev:
+                              type: boolean
+                            blockDevice:
+                              type: boolean
+                            appId:
+                              type: integer
+                            isDelete:
+                              type: boolean
+                            tags:
+                              type: array
+                              items:
+                                type: string
+                            createdDate:
+                              type: string
+                              format: date-time
+                            updateAt:
+                              type: string
+                              format: date-time
+                            name:
+                              type: string
+                            uniqueCode:
+                              type: string
+                            ip:
+                              type: string
+                            owner:
+                              type: string
+                              description: ObjectId hex
+                            tokenDevice:
+                              type: string
+                            __v:
+                              type: integer
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 7 records on the reference account.
+  "/wallet/list":
+    post:
+      operationId: wallet_list
+      summary: All wallets, including archived ones
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `wallet_list`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            name:
+                              type: string
+                            currency_id:
+                              type: integer
+                            owner:
+                              type: string
+                              description: ObjectId hex
+                            isDelete:
+                              type: boolean
+                            listUser:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  _id:
+                                    type: string
+                                    description: ObjectId hex
+                                  email:
+                                    type: string
+                            icon:
+                              type: string
+                            exclude_total:
+                              type: boolean
+                            account_type:
+                              type: integer
+                            metadata:
+                              type: string
+                            archived:
+                              type: boolean
+                            transaction_notification:
+                              type: boolean
+                            sortIndex:
+                              type: integer
+                            updateAt:
+                              type: string
+                              format: date-time
+                            createdAt:
+                              type: string
+                              format: date-time
+                            balance:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  INR:
+                                    type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 13 records on the reference account.
+  "/wallet/balance":
+    post:
+      operationId: wallet_balance
+      summary: Current balance of one wallet
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                walletId:
+                  type: string
+                  description: Wallet _id from wallet/list
+              required:
+                - walletId
+      responses:
+        200:
+          description: error 0, msg `get_balance_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          _id:
+                            type: string
+                            description: 32-char uppercase hex id
+                          balance:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                INR:
+                                  type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 2 records on the reference account.
+  "/wallet/awaiting-shared":
+    post:
+      operationId: wallet_awaiting_shared
+      summary: Pending shared-wallet invitations
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `awaiting_shared`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items: {}
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 0 records on the reference account.
+  "/transaction/list":
+    post:
+      operationId: transaction_list
+      summary: Transactions for one wallet in a date range
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                walletId:
+                  type: string
+                  description: Wallet _id from wallet/list
+                startDate:
+                  type: string
+                  format: date
+                  example: 2026-08-01
+                endDate:
+                  type: string
+                  format: date
+                  example: 2026-08-01
+              required:
+                - walletId
+                - startDate
+                - endDate
+      responses:
+        200:
+          description: error 0, msg `get_transaction_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          daterange:
+                            type: object
+                            properties:
+                              startDate:
+                                type: string
+                                format: date
+                              endDate:
+                                type: string
+                                format: date
+                          transactions:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                note:
+                                  type: string
+                                account:
+                                  type: object
+                                  properties:
+                                    _id:
+                                      type: string
+                                      description: 32-char uppercase hex id
+                                    name:
+                                      type: string
+                                    currency_id:
+                                      type: integer
+                                    account_type:
+                                      type: integer
+                                    icon:
+                                      type: string
+                                category:
+                                  type: object
+                                  properties:
+                                    _id:
+                                      type: string
+                                      description: 32-char uppercase hex id
+                                    name:
+                                      type: string
+                                    icon:
+                                      type: string
+                                    type:
+                                      type: integer
+                                    metadata:
+                                      type: string
+                                    parent:
+                                      type: object
+                                    categories:
+                                      type: array
+                                      items: {}
+                                    account:
+                                      type: string
+                                      description: 32-char uppercase hex id
+                                amount:
+                                  type: number
+                                displayDate:
+                                  type: string
+                                  format: date-time
+                                remind:
+                                  type: integer
+                                address:
+                                  type: string
+                                longtitude:
+                                  type: integer
+                                latitude:
+                                  type: integer
+                                with:
+                                  type: array
+                                  items: {}
+                                campaign:
+                                  type: array
+                                  items: {}
+                                lastEditBy:
+                                  type: object
+                                  properties:
+                                    _id:
+                                      type: string
+                                      description: ObjectId hex
+                                    email:
+                                      type: string
+                                exclude_report:
+                                  type: boolean
+                                images:
+                                  type: array
+                                  items: {}
+                                createdAt:
+                                  type: string
+                                  format: date-time
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 2 records on the reference account.
+  "/transaction/list-all":
+    post:
+      operationId: transaction_list_all
+      summary: Every transaction on the account, fully populated
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `transaction_list`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            note:
+                              type: string
+                            account:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                name:
+                                  type: string
+                                currency_id:
+                                  type: integer
+                                icon:
+                                  type: string
+                                account_type:
+                                  type: integer
+                                metadata:
+                                  type: string
+                            category:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                name:
+                                  type: string
+                                icon:
+                                  type: string
+                                metadata:
+                                  type: string
+                                type:
+                                  type: integer
+                                account:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                            amount:
+                              type: number
+                            displayDate:
+                              type: string
+                              format: date-time
+                            remind:
+                              type: integer
+                            address:
+                              type: string
+                            longtitude:
+                              type: integer
+                            latitude:
+                              type: integer
+                            with:
+                              type: array
+                              items: {}
+                            campaign:
+                              type: array
+                              items: {}
+                            lastEditBy:
+                              type: string
+                              description: ObjectId hex
+                            exclude_report:
+                              type: boolean
+                            images:
+                              type: array
+                              items: {}
+                            related:
+                              type: string
+                              description: 32-char uppercase hex id
+                            createdAt:
+                              type: string
+                              format: date-time
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 11194 records on the reference account.
+  "/transaction/config-search":
+    post:
+      operationId: transaction_config_search
+      summary: Every transaction, reduced projection
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `transaction_list`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            category:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                name:
+                                  type: string
+                                icon:
+                                  type: string
+                                metadata:
+                                  type: string
+                                type:
+                                  type: integer
+                                id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                            amount:
+                              type: number
+                            address:
+                              type: string
+                            longtitude:
+                              type: integer
+                            latitude:
+                              type: integer
+                            with:
+                              type: array
+                              items: {}
+                            owner:
+                              type: string
+                              description: ObjectId hex
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 10510 records on the reference account.
+  "/category/list":
+    post:
+      operationId: category_list
+      summary: Categories of one wallet
+      tags:
+        - category
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                walletId:
+                  type: string
+                  description: Wallet _id from wallet/list
+              required:
+                - walletId
+      responses:
+        200:
+          description: error 0, msg `get_cate_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                            account:
+                              type: string
+                              description: 32-char uppercase hex id
+                            type:
+                              type: integer
+                            metadata:
+                              type: string
+                            group:
+                              type: integer
+                            id:
+                              type: string
+                              description: 32-char uppercase hex id
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 44 records on the reference account.
+  "/category/list-all":
+    post:
+      operationId: category_list_all
+      summary: Categories across every wallet
+      tags:
+        - category
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `category_list_all`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                              description: |-
+                                Renders from `https://static.moneylover.me/img/icon/<icon>.png`. The built-in
+                                set is `icon_1` … `icon_143` (contiguous, verified) plus ~20 `ic_category_*`
+                                aliases for the seeded defaults. `icon/data` returns
+                                `error 1 get_pack_icon_error` for every payload tried, so the catalogue is
+                                only discoverable by probing that CDN path.
+                            type:
+                              type: integer
+                              description: 1 = income, 2 = expense.
+                            metadata:
+                              type: string
+                              description: |-
+                                An `IS_*` value (`IS_LOAN`, `IS_OUTGOING_TRANSFER`, `IS_REPAYMENT`,
+                                `IS_UNCATEGORIZED_EXPENSE`, …) marks a **system** category the app
+                                special-cases. Do not rename or delete those. Seeded defaults instead carry a
+                                slug+counter (`foodndrink0`); user-created rows carry `""`.
+                            exclude_accounts:
+                              type: array
+                              items: {}
+                              description: |-
+                                Wallets the category is hidden from. `[]` means global — visible in every
+                                wallet, which is how the 44 shared defaults are stored. A category created via
+                                `category/add` always lands wallet-local, with all other wallet ids listed
+                                here; no `category/edit` payload tried could reset it to `[]`.
+                            parent:
+                              type: string
+                              description: |-
+                                Parent category `_id`, giving Money Lover a two-level tree (e.g. `Bills &
+                                Utilities` → `Electricity Bill`). **Read-only over this API**: `category/add`
+                                silently drops `parent`, and `category/edit` rejects it with
+                                `error 1 sync_error_data_invalid` under every key tried (`parent`, `parent_id`,
+                                `parentId`, alone or with the full row). Existing parent links were seeded
+                                server-side or set by the mobile app, so a taxonomy built here is necessarily
+                                flat.
+                            account:
+                              type: string
+                              description: 32-char uppercase hex id
+                            group:
+                              type: integer
+                            id:
+                              type: string
+                              description: 32-char uppercase hex id
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 584 records on the reference account.
+  "/event/list/all":
+    post:
+      operationId: event_list_all
+      summary: Events (trips / campaigns)
+      tags:
+        - event
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `event_list`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                            start_amount:
+                              type: integer
+                            goal_amount:
+                              type: integer
+                            type:
+                              type: integer
+                            status:
+                              type: boolean
+                            end_date:
+                              type: string
+                              format: date-time
+                            currency_id:
+                              type: integer
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 15 records on the reference account.
+  "/budget/list/all":
+    post:
+      operationId: budget_list_all
+      summary: Budgets with their matching transactions
+      tags:
+        - budget
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `budget_list_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: 32-char uppercase hex id
+                            category:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                name:
+                                  type: string
+                                icon:
+                                  type: string
+                                type:
+                                  type: integer
+                                id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                            amount:
+                              type: integer
+                            account:
+                              type: object
+                              properties:
+                                _id:
+                                  type: string
+                                  description: 32-char uppercase hex id
+                                name:
+                                  type: string
+                                currency_id:
+                                  type: integer
+                                account_type:
+                                  type: integer
+                                exclude_total:
+                                  type: boolean
+                                icon:
+                                  type: string
+                                createdAt:
+                                  type: string
+                                  format: date-time
+                            start_date:
+                              type: string
+                              format: date-time
+                            end_date:
+                              type: string
+                              format: date-time
+                            isRepeat:
+                              type: boolean
+                            expenseTransactions:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  _id:
+                                    type: string
+                                    description: 32-char uppercase hex id
+                                  note:
+                                    type: string
+                                  account:
+                                    type: object
+                                    properties:
+                                      _id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      name:
+                                        type: string
+                                      currency_id:
+                                        type: integer
+                                      account_type:
+                                        type: integer
+                                      icon:
+                                        type: string
+                                  category:
+                                    type: object
+                                    properties:
+                                      _id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      name:
+                                        type: string
+                                      icon:
+                                        type: string
+                                      account:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      type:
+                                        type: integer
+                                      metadata:
+                                        type: string
+                                      id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                  amount:
+                                    type: integer
+                                  lastEditBy:
+                                    type: object
+                                    properties:
+                                      _id:
+                                        type: string
+                                        description: ObjectId hex
+                                      email:
+                                        type: string
+                                  longtitude:
+                                    type: integer
+                                  latitude:
+                                    type: integer
+                                  displayDate:
+                                    type: string
+                                    format: date-time
+                                  remind:
+                                    type: integer
+                                  metadata:
+                                    type: string
+                                  images:
+                                    type: array
+                                    items: {}
+                                  exclude_report:
+                                    type: boolean
+                                  createdAt:
+                                    type: string
+                                    format: date-time
+                                  campaign:
+                                    type: array
+                                    items: {}
+                                  with:
+                                    type: array
+                                    items: {}
+                                  currency_code:
+                                    type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 7 records on the reference account.
+  "/debt/list/all":
+    post:
+      operationId: debt_list_all
+      summary: Debt and loan records grouped by person
+      tags:
+        - debt
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `debt_list_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            parent:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  _id:
+                                    type: string
+                                    description: 32-char uppercase hex id
+                                  note:
+                                    type: string
+                                  account:
+                                    type: object
+                                    properties:
+                                      _id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      name:
+                                        type: string
+                                      currency_id:
+                                        type: integer
+                                      account_type:
+                                        type: integer
+                                      icon:
+                                        type: string
+                                  category:
+                                    type: object
+                                    properties:
+                                      _id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      name:
+                                        type: string
+                                      icon:
+                                        type: string
+                                      account:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                      type:
+                                        type: integer
+                                      metadata:
+                                        type: string
+                                      id:
+                                        type: string
+                                        description: 32-char uppercase hex id
+                                  amount:
+                                    type: integer
+                                  lastEditBy:
+                                    type: string
+                                    description: ObjectId hex
+                                  longtitude:
+                                    type: integer
+                                  latitude:
+                                    type: integer
+                                  displayDate:
+                                    type: string
+                                    format: date-time
+                                  remind:
+                                    type: integer
+                                  metadata:
+                                    type: string
+                                  images:
+                                    type: array
+                                    items: {}
+                                  exclude_report:
+                                    type: boolean
+                                  createdAt:
+                                    type: string
+                                    format: date-time
+                                  campaign:
+                                    type: array
+                                    items: {}
+                                  with:
+                                    type: array
+                                    items:
+                                      type: string
+                            with:
+                              type: string
+                            children:
+                              type: array
+                              items: {}
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 67 records on the reference account.
+  "/linked/provider":
+    post:
+      operationId: linked_provider
+      summary: Bank providers available for account linking
+      tags:
+        - linked
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            name:
+                              type: string
+                            icon:
+                              type: string
+                            primary_color:
+                              type: string
+                            type:
+                              type: string
+                            country_code:
+                              type: string
+                            has_balance:
+                              type: boolean
+                            meta_search:
+                              type: string
+                            is_free:
+                              type: boolean
+                            is_debug:
+                              type: boolean
+                            otp:
+                              type: boolean
+                            browser:
+                              type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 55 records on the reference account.
+  "/icon/download":
+    post:
+      operationId: icon_download
+      summary: Icon packs downloaded by the user
+      tags:
+        - icon
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+      responses:
+        200:
+          description: error 0, msg `get_list_icon_download_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: array
+                        items: {}
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+      description: Observed 0 records on the reference account.
+  "/category/add":
+    post:
+      operationId: category_add
+      summary: Create a category in one wallet
+      description: |-
+          **Takes `walletId`, not `account`** — the opposite of `transaction/add`. That asymmetry is the whole difficulty of this endpoint.
+          
+          `type` is 1 for income and 2 for expense. Returns only the new `_id`. Categories are per-wallet, so building a taxonomy across the account means one call per wallet per category.
+          
+          The returned `_id` is a provisional `web…`-prefixed id. A category at this stage is invisible to `category/list-all` and **cannot be assigned to a transaction** — `transaction/add` with it hangs for 120s rather than erroring. One `category/edit` on that id **promotes** it: the row gains a real hex `_id`, appears in `category/list-all` with `exclude_accounts` listing every other wallet, and transaction assignment then works in ~0.6s.
+          
+          Keep the `web…` id after creating. It stays the sync key: `category/delete` only accepts that form, never the promoted `_id` (see `/category/delete`).
+          
+          `parent` is silently ignored here — see the `parent` field on the Category schema.
+      tags:
+        - category
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                walletId:
+                  type: string
+                  description: Wallet _id. NOT `account`.
+                icon:
+                  type: string
+                  examples:
+                    - ic_category_foodndrink
+                type:
+                  type: integer
+                  enum:
+                    - 1
+                    - 2
+                  description: 1 = income, 2 = expense.
+              required:
+                - name
+                - walletId
+                - icon
+                - type
+      responses:
+        200:
+          description: error 0, msg `category_create_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          _id:
+                            type: string
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/category/delete":
+    post:
+      operationId: category_delete
+      summary: Delete a category
+      description: |-
+          `_id` must be the provisional `web…` id returned by `category/add`, **not** the promoted hex `_id` that `category/list-all` reports. Passing the promoted id returns `error 1 sync_error_data_invalid`, as does every other shape tried (`id`, `categoryId`, `_id`+`account`, `_id`+`walletId`, the full row).
+          
+          A successful delete returns `error 0` immediately but `category/list-all` still shows the row for a few seconds; it cleared within 10s on the reference account. No wallet id, no reassignment target.
+      tags:
+        - category
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                _id:
+                  type: string
+              required:
+                - _id
+      responses:
+        200:
+          description: error 0, msg `category_delete_success`
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/category/edit":
+    post:
+      operationId: category_edit
+      summary: Rename or re-icon a category
+      description: |-
+          Minimum accepted payload is `_id` + `name` + `icon`; `_id` alone or `_id`+`name` returns `error 1`. Categories are **per-wallet**, so renaming a concept across the account means one call per wallet that has it.
+          
+          Discovered by sending the category's own current values back — a deliberate no-op. Note that even an identical-value edit increments the category's `metadata` counter, so it is not perfectly inert.
+      tags:
+        - category
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                icon:
+                  type: string
+                  examples:
+                    - ic_category_foodndrink
+              required:
+                - _id
+                - name
+                - icon
+      responses:
+        200:
+          description: error 0, msg `category_edit_success`
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/transaction/add":
+    post:
+      operationId: transaction_add
+      summary: Create a transaction
+      description: |-
+          Captured from the web client and exercised end to end from a plain HTTP client.
+          
+          **Two traps.** The field names are `account` and `category`, not `walletId`/`categoryId` as every read endpoint uses. And `category` must be the id from **`category/list-all`** — that endpoint returns the *same* id for a given category name across every wallet, and it is the one writes accept. `category/list?walletId=…` returns a different, wallet-scoped id for the same category; sending that makes the request hang until Cloudflare returns 524 at ~120s instead of returning an error. The response echoes back the wallet-scoped id, which is what makes this so confusing to debug.
+          
+          The response echoes the stored record, whose `_id` is prefixed `web` for anything created through this client. Note the server may return a **different** `category` id than the one sent, resolving it to the equivalent category in the target wallet.
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                account:
+                  type: string
+                  description: Wallet _id from wallet/list. NOT `walletId`.
+                category:
+                  type: string
+                  description: Category _id **from `category/list-all`**, not from `category/list`. The two return different ids for the same category and passing the wallet-scoped one hangs the request for 120s. See the warning on this operation.
+                amount:
+                  type: number
+                  description: Always positive; income vs expense comes from the category's `type`.
+                note:
+                  type: string
+                displayDate:
+                  type: string
+                  format: date
+                  examples:
+                    - 2026-09-10
+                event:
+                  type: string
+                  description: Event _id, or empty string.
+                exclude_report:
+                  type: boolean
+                with:
+                  type: array
+                  items:
+                    type: string
+                  description: People names.
+                longtitude:
+                  type: number
+                  description: Spelled this way by the API.
+                latitude:
+                  type: number
+                addressName:
+                  type: string
+                addressDetails:
+                  type: string
+                addressIcon:
+                  type: string
+                image:
+                  type: string
+              required:
+                - account
+                - category
+                - amount
+                - displayDate
+      responses:
+        200:
+          description: error 0, msg `transaction_add_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          account:
+                            type: string
+                            description: Wallet _id from wallet/list. NOT `walletId`.
+                          category:
+                            type: string
+                            description: Category _id **from `category/list-all`**, not from `category/list`. The two return different ids for the same category and passing the wallet-scoped one hangs the request for 120s. See the warning on this operation.
+                          amount:
+                            type: number
+                            description: Always positive; income vs expense comes from the category's `type`.
+                          note:
+                            type: string
+                          displayDate:
+                            type: string
+                            format: date
+                            examples:
+                              - 2026-09-10
+                          event:
+                            type: string
+                            description: Event _id, or empty string.
+                          exclude_report:
+                            type: boolean
+                          with:
+                            type: array
+                            items:
+                              type: string
+                            description: People names.
+                          longtitude:
+                            type: number
+                            description: Spelled this way by the API.
+                          latitude:
+                            type: number
+                          addressName:
+                            type: string
+                          addressDetails:
+                            type: string
+                          addressIcon:
+                            type: string
+                          image:
+                            type: string
+                          _id:
+                            type: string
+                          tokenDevice:
+                            type: string
+                            examples:
+                              - web
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/transaction/edit":
+    post:
+      operationId: transaction_edit
+      summary: Update a transaction
+      description: Same payload as `transaction/add` plus `_id`. Send the whole object — this is a replace, not a patch. The response carries no `data`.
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                account:
+                  type: string
+                  description: Wallet _id from wallet/list. NOT `walletId`.
+                category:
+                  type: string
+                  description: Category _id **from `category/list-all`**, not from `category/list`. The two return different ids for the same category and passing the wallet-scoped one hangs the request for 120s. See the warning on this operation.
+                amount:
+                  type: number
+                  description: Always positive; income vs expense comes from the category's `type`.
+                note:
+                  type: string
+                displayDate:
+                  type: string
+                  format: date
+                  examples:
+                    - 2026-09-10
+                event:
+                  type: string
+                  description: Event _id, or empty string.
+                exclude_report:
+                  type: boolean
+                with:
+                  type: array
+                  items:
+                    type: string
+                  description: People names.
+                longtitude:
+                  type: number
+                  description: Spelled this way by the API.
+                latitude:
+                  type: number
+                addressName:
+                  type: string
+                addressDetails:
+                  type: string
+                addressIcon:
+                  type: string
+                image:
+                  type: string
+                _id:
+                  type: string
+              required:
+                - _id
+                - account
+                - category
+                - amount
+                - displayDate
+      responses:
+        200:
+          description: error 0, msg `transaction_edit_success`
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/transaction/delete":
+    post:
+      operationId: transaction_delete
+      summary: Delete a transaction
+      description: "`delRelated` controls whether linked rows (the paired leg of a transfer, or a debt's repayments) go too. The client sends `false` for an ordinary transaction."
+      tags:
+        - transaction
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                _id:
+                  type: string
+                delRelated:
+                  type: boolean
+                  default: false
+                  description: Also delete related transactions.
+              required:
+                - _id
+      responses:
+        200:
+          description: error 0, msg `transaction_delete_success`
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/wallet/add":
+    post:
+      operationId: wallet_add
+      summary: wallet/add — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1` with msg `sync_error_data_invalid`, action `wallet_create`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/wallet/edit":
+    post:
+      operationId: wallet_edit
+      summary: wallet/edit — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1` with msg `sync_error_data_invalid`, action `wallet_edit`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/wallet/delete":
+    post:
+      operationId: wallet_delete
+      summary: wallet/delete — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1` with msg `sync_error_data_invalid`, action `wallet_delete`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/event/add":
+    post:
+      operationId: event_add
+      summary: event/add — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1`, action `event_create`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - event
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/budget/add":
+    post:
+      operationId: budget_add
+      summary: budget/add — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1`, action `budget_add`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - budget
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/budget/edit":
+    post:
+      operationId: budget_edit
+      summary: budget/edit — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1`, action `budget_edit`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - budget
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/budget/delete":
+    post:
+      operationId: budget_delete
+      summary: budget/delete — route confirmed, payload not reverse engineered
+      description: "Route exists: an empty body returns `error: 1`, action `budget_delete`. The payload was NOT probed — doing so would have written to a real financial account. Capture it from the web client's network tab before relying on this."
+      tags:
+        - budget
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; `error: 1` on an invalid payload"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/budget/list/full":
+    post:
+      operationId: budget_list_full
+      summary: budget/list/full — route confirmed, parameters unknown
+      description: "Exists alongside `list/all`: an empty body returns `error: 1`, so the route resolves but wants parameters. What it returns beyond `list/all` was not determined."
+      tags:
+        - budget
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; observed `error: 1` with an empty body"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/debt/list/full":
+    post:
+      operationId: debt_list_full
+      summary: debt/list/full — route confirmed, parameters unknown
+      description: "Exists alongside `list/all`: an empty body returns `error: 1`, so the route resolves but wants parameters. What it returns beyond `list/all` was not determined."
+      tags:
+        - debt
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; observed `error: 1` with an empty body"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/event/list/full":
+    post:
+      operationId: event_list_full
+      summary: event/list/full — route confirmed, parameters unknown
+      description: "Exists alongside `list/all`: an empty body returns `error: 1`, so the route resolves but wants parameters. What it returns beyond `list/all` was not determined."
+      tags:
+        - event
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        200:
+          description: "Envelope; observed `error: 1` with an empty body"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+  "/user/refresh-token":
+    post:
+      operationId: user_refresh_token
+      summary: Exchange a refresh token for a new access token
+      description: |-
+          The only part of auth that can be automated. Takes no Authorization header and no client secret. Returns a new access token (7 days) and a rotated refresh token (~10 years); the rotated one works for the next call, so the chain is indefinite.
+          
+          Verified: the pre-logout access token still worked after signing out, so tokens are not revoked server-side.
+      tags:
+        - user
+      security: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+              required:
+                - refreshToken
+      responses:
+        200:
+          description: error 0, msg `refresh_token_success`
+          content:
+            "application/json":
+              schema:
+                allOf:
+                  -
+                    "$ref": "#/components/schemas/Envelope"
+                  -
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: boolean
+                          access_token:
+                            type: string
+                          refresh_token:
+                            type: string
+                          expire:
+                            type: integer
+                            description: Unix seconds.
+        400:
+          "$ref": "#/components/responses/BadBody"
+  "/report/{type}":
+    post:
+      operationId: report_type
+      summary: report/{type} — wildcard route, parameters unresolved
+      description: Any `type` resolves (`report/zzzznonsense` answers `report_invalid_start_date`), so this is one catch-all route rather than a set. Supplying startDate/endDate then returns `sync_error_have_not_permission` for every wallet/param combination tried, so the accepted shape is unknown — possibly premium-gated or served by a different backend.
+      tags:
+        - report
+      parameters:
+        -
+          name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: object
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+      responses:
+        200:
+          description: "Envelope; observed `error: 1` in all attempts"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Envelope"
+        400:
+          "$ref": "#/components/responses/BadBody"
+        401:
+          "$ref": "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    AuthJWT:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |-
+          Value is `AuthJWT <access_token>` — note the custom scheme name, not `Bearer`.
+          
+          The token is an HS256 JWT with claims `type: access-token`, `userId`, `tokenDevice`, `clientId`, `client` and a ~7 day `exp`. The web client's OAuth client id is `kHiZbFQOw5LV` (from its runtime config).
+          
+          ### Getting a token
+          
+          **Interactive login is reCAPTCHA-gated and cannot be scripted.** The flow:
+          1. `web.moneylover.me` redirects to `oauth.moneylover.me/auth?client=kHiZbFQOw5LV&token=<request-token>&callback=<url>`. The `token` query param is a short-lived JWT with `type: request-token`, a `code` UUID and a 1 hour expiry.
+          2. The page posts credentials to `POST https://oauth.moneylover.me/web/token` with headers `Authorization: Bearer <request-token>`, `client: kHiZbFQOw5LV` and `apiversion: 4`, and body `{client_info: true, email, password, "g-recaptcha-response": "..."}`.
+          3. On success the browser is redirected to `<callback>?access_token=…&refresh_token=…&expire=…&status=true`.
+          
+          That `g-recaptcha-response` is invisible reCAPTCHA v3, so step 2 cannot be replayed from a script. Log in once in a browser and keep the **refresh token**.
+          
+          ### Staying authenticated
+          
+          `POST /user/refresh-token` with `{"refreshToken": "…"}` returns a fresh access token and a rotated refresh token. It needs **no Authorization header and no client secret**. The access token lasts 7 days; the refresh token is issued with a ~10 year expiry, so one browser login is enough to keep a client running indefinitely.
+          
+          Do not use `oauth.moneylover.me/token` — it answers `OauthErrorClientSecretNotValidate` and the web client's secret is not in its bundle.
+          
+          **Signing out does not revoke anything.** An access token captured before a logout still authenticated successfully afterwards, so treat these tokens as bearer secrets valid until their `exp`.
+  responses:
+    Unauthorized:
+      description: "Token present but rejected. Uses abbreviated keys instead of the normal envelope, so clients keying on `error` will miss it. A request with no Authorization header instead returns a normal envelope with `error: 0` and empty `data`."
+      content:
+        "application/json":
+          schema:
+            type: object
+            properties:
+              s:
+                type: boolean
+                examples:
+                  - false
+              e:
+                type: integer
+                examples:
+                  - 706
+              msg:
+                type: string
+                examples:
+                  - Not authorized error
+              router:
+                type: string
+                examples:
+                  - /api/wallet/list
+    BadBody:
+      description: Malformed JSON body. The API answers with an Express `body-parser` error object — note this is NOT the standard envelope, so a client that assumes `error`/`data` will throw here.
+      content:
+        "application/json":
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+              stack:
+                type: string
+              statusCode:
+                type: integer
+                examples:
+                  - 400
+              type:
+                type: string
+                examples:
+                  - entity.parse.failed
+  schemas:
+    Envelope:
+      type: object
+      description: "Uniform response wrapper. `error: 0` is success; `1` means the payload was rejected."
+      properties:
+        error:
+          type: integer
+          examples:
+            - 0
+            - 1
+            - 706
+        msg:
+          type: string
+          description: Machine-readable status slug, e.g. `wallet_list`.
+        action:
+          type:
+            - string
+            - "null"
+        data:
+          description: Payload; shape depends on the operation.
+      required:
+        - error
