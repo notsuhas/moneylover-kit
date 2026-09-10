@@ -13,9 +13,22 @@
  * can do is available here.
  */
 
-export { accessToken, mobileLogin, tokenLocation, webLogin } from "./api/auth.js";
+export {
+  type AuthOptions,
+  accessToken,
+  MOBILE_APPVERSION,
+  mobileLogin,
+  tokenLocation,
+  webLogin,
+} from "./api/auth.js";
 export { createMobileBackend } from "./api/backends/mobile/index.js";
 export { createWebBackend } from "./api/backends/web/index.js";
+/**
+ * The low-level request layer, for endpoints this library does not model.
+ * `post` handles retries and the browser User-Agent Cloudflare insists on;
+ * `unwrap` handles all four of Money Lover's response shapes.
+ */
+export { post, type RequestOptions, unwrap } from "./api/http.js";
 export { type ClientOptions, createClient, type MoneyLover } from "./client/index.js";
 export {
   type LendingInput,
