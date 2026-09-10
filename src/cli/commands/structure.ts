@@ -49,12 +49,13 @@ export const addCategory: Command = async ({ client, flags, show, defined }) => 
   if (!name) fail("add-category needs --name");
   const type = flags.type ?? "expense";
   if (type !== "income" && type !== "expense") fail("--type must be income or expense");
-  // No wallet means every wallet, which is what the app itself does.
+  // No wallet means every wallet, which is what the app itself does. The
+  // client routes that to whichever API can express it.
   const wallet = flags["all-wallets"] ? undefined : flags.wallet;
   if (!wallet && !client.can.labels) {
     fail(
-      `the ${client.backend} backend needs --wallet for a new category. ` +
-        "Use --backend mobile for an all-wallet category.",
+      "an all-wallet category needs the mobile API — set MONEYLOVER_MOBILE_CLIENT\n" +
+        "and MONEYLOVER_MOBILE_SECRET, or name a wallet with --wallet.",
     );
   }
   const made = await client.addCategory({

@@ -14,6 +14,12 @@ anything.
 | Nested / all-wallet categories | not modelled | the `label` layer |
 | Write safety | a wrong id hangs for ~120s | rejected items come back in `failedItems` |
 | Setup | email + password | also the app's OAuth client |
+| Events / trips | no route (all 404) | yes |
+| Batched writes | one per request | up to 50 per request |
+
+The client composes both and routes per operation, so you normally do not pick
+one — see the routing table in the README. What follows is what each API can
+actually do.
 
 `spec/web-openapi.yaml` is an OpenAPI 3.1 description of the web API, inferred
 from real responses, plus `spec/web-observed-schemas.json` with per-field

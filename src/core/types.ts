@@ -154,16 +154,26 @@ export interface CategoryPatch {
   icon?: string;
 }
 
-/** What a backend can actually do. The two differ, and callers need to know. */
+/**
+ * What a backend can actually do.
+ *
+ * The two APIs are not equivalent and neither is a superset, so this exists to
+ * be *routed on* rather than read by a user: `createClient` composes both and
+ * sends each operation to whichever one can do it.
+ */
 export interface Capabilities {
-  /** Wallet balances on reads. */
+  /** Wallet balances on reads. Web only. */
   balances: boolean;
-  /** Create, edit and delete wallets. */
+  /** Create, edit and delete wallets. Web only — mobile's payload is unknown. */
   wallets: boolean;
   /** Create, edit and delete categories. */
   categories: boolean;
-  /** The global label layer: all-wallet categories and parent nesting. */
+  /** The global label layer: all-wallet categories and parent nesting. Mobile only. */
   labels: boolean;
+  /** Events / trips. Mobile only — every web route for these 404s. */
+  events: boolean;
+  /** Many writes per request, which a bulk recategorisation needs. Mobile only. */
+  batchWrites: boolean;
 }
 
 export interface Account {
@@ -180,7 +190,8 @@ export interface Backend {
   wallets(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
   transactions(): Promise<Transaction[]>;
-  events(): Promise<Event[]>;
+  /** Events / trips. Present only where `can.events` says so. */
+  events?(): Promise<Event[]>;
   /** Global, nestable category records. Mobile only — the web API has no equivalent. */
   labels?(): Promise<Label[]>;
   addTransaction(input: NewTransaction): Promise<string>;

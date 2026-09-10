@@ -240,6 +240,30 @@ Related: a label with an empty `exclude_accounts` means "active in every
 wallet". So a category created in **one** wallet needs every *other* wallet
 listed as excluded, or the label claims a scope its rows do not have.
 
+### The two APIs do not agree on ids, except where they do
+
+Measured on a live account:
+
+| | Shared across both APIs? |
+|---|---|
+| wallet ids | yes — 13 of 13 |
+| transaction ids | yes — 11,194 of 11,194 |
+| category ids | **no — 0 shared** |
+| category *names* | yes — 60 of 60 |
+
+So you can read a transaction from one API and write it through the other. You
+cannot do that with a category id. Worse, a transaction's `category` id is the
+**per-wallet** one on *both* APIs, while web's `category/list-all` returns a
+global set that matches no transaction at all — which is why the only reliable
+cross-API handle for a category is its name.
+
+### Events are mobile-only
+
+`/event/list`, `/campaign/list`, `/event/list-all` and `/campaign/list-all` all
+404 on the web API. `/event/list/full` exists but answers
+`sync_error_have_not_permission`. Events come from
+`sync/pull/campaign/v2` on mobile or not at all.
+
 ### Balances in different currencies are not comparable
 
 A wallet carries a numeric `currency_id` and nothing converts between them.

@@ -6,13 +6,17 @@ import * as render from "../render.js";
 
 export const whoami: Command = async ({ client, show }) => {
   const account = await client.account();
-  show({ ...account, backend: client.backend, can: client.can }, () => {
-    console.log(`${account.email}  (${client.backend} backend)`);
+  show({ ...account, can: client.can, routing: client.routing }, () => {
+    console.log(`${account.email}`);
     console.log(`devices allowed: ${account.deviceLimit || "unknown"}`);
-    const can = Object.entries(client.can)
-      .filter(([, yes]) => yes)
+    const missing = Object.entries(client.can)
+      .filter(([, yes]) => !yes)
       .map(([what]) => what);
-    console.log(`can write: ${can.join(", ") || "transactions only"}`);
+    console.log("\nrouting");
+    for (const [what, where] of Object.entries(client.routing)) {
+      console.log(`  ${what.padEnd(18)} ${where}`);
+    }
+    if (missing.length) console.log(`\nunavailable: ${missing.join(", ")}`);
   });
 };
 
@@ -37,7 +41,10 @@ export const listEvents: Command = async ({ client, show }) => {
 export const listLabels: Command = async ({ client, show }) => {
   const rows = await client.labels();
   if (rows.length === 0 && !client.can.labels) {
-    fail(`the ${client.backend} backend has no label layer — try --backend mobile`);
+    fail(
+      "the label layer needs the mobile API — set MONEYLOVER_MOBILE_CLIENT and\n" +
+        "MONEYLOVER_MOBILE_SECRET. See docs/api.md.",
+    );
   }
   show(rows, () => render.labels(rows));
 };

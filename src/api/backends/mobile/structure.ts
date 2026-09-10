@@ -147,12 +147,14 @@ export function createStructure({ push, wallets, categories, labels }: Structure
         }
       }
 
-      // A label with no exclusions means "every wallet". When only one wallet
-      // is targeted, every other wallet has to be listed as excluded or the
-      // label claims a scope its rows do not have.
-      const excluded = input.wallet
-        ? (await wallets()).map((w) => w.id).filter((id) => !walletIds.includes(id))
-        : [];
+      /**
+       * A label with no exclusions means "active in every wallet", so the
+       * exclusion list must be exactly the wallets that got no row — whether
+       * that is because one wallet was named, or because the rest are
+       * archived. Deriving it from what was actually written keeps the two
+       * layers from disagreeing.
+       */
+      const excluded = (await wallets()).map((w) => w.id).filter((id) => !walletIds.includes(id));
 
       const items: CategoryItem[] = [];
       const created: string[] = [];

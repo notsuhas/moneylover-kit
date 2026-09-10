@@ -142,23 +142,49 @@ await ml.lending("Sam");
 The CLI and the MCP server are both thin layers over this, so they cannot do
 anything the library can't.
 
-## Two backends
+## Two APIs, one client
 
-|                                | `web` (default)                     | `mobile`                          |
-| ------------------------------ | ----------------------------------- | --------------------------------- |
-| Setup                          | email + password                    | also needs the app's OAuth client |
-| Wallet balances                | **yes**                             | no                                |
-| Writes                         | work, with a wrong-id hang to avoid | fail safe, no hang                |
-| Nested / all-wallet categories | not modelled                        | `label` layer                     |
+Money Lover's web and mobile clients grew separately and **neither is a
+superset**. Rather than make you pick, this composes both and routes each
+operation to whichever can actually do it:
 
-The web backend is the default because it needs nothing extra. Choose per
-command with `--backend mobile`, or set `MONEYLOVER_BACKEND`.
+|                    | Served by | Because                                             |
+| ------------------ | --------- | --------------------------------------------------- |
+| wallets, balances  | web       | the only one that reports balances                  |
+| transactions       | web       | one request, not 45 paginated pulls                 |
+| categories         | mobile    | its ids are the ones transaction rows reference     |
+| events, labels     | mobile    | every web route for these 404s                      |
+| transaction writes | mobile    | rejected items fail safe; batches; no wrong-id hang |
+| category writes    | mobile    | writes both layers, so nesting and all-wallet work  |
+| wallet writes      | web       | the only one whose payloads are known               |
 
-The mobile backend needs `MONEYLOVER_MOBILE_CLIENT` and
-`MONEYLOVER_MOBILE_SECRET`. Those aren't shipped here — they're embedded in
-every copy of the Android app, so they aren't a secret of yours, but putting
-them in a public repo would get them rotated and break everyone.
-[docs/api.md](docs/api.md) explains what they are.
+That routing is measured, not assumed: wallet and transaction ids are identical
+across both APIs (13/13 and 11,194/11,194 on a real account), which is what
+makes it safe to read from one and write to the other. Category ids are _not_
+shared — but every helper takes names, so it never comes up.
+
+`moneylover whoami` prints the live routing table.
+
+With only web credentials you get everything except events, labels, nested and
+all-wallet categories, and batched writes — and asking for one of those names
+the API you're missing instead of failing vaguely. To add mobile:
+
+```bash
+export MONEYLOVER_MOBILE_CLIENT="…"
+export MONEYLOVER_MOBILE_SECRET="…"
+```
+
+Those are the Android app's own credentials, hardcoded in every copy of it. They
+aren't a secret of yours, but they're not published here — a searchable public
+copy is what gets them rotated, which would break every unofficial client at
+once. [docs/api.md](docs/api.md) explains how to get them.
+
+`--backend web|mobile` forces one API. It's an escape hatch for reproducing a
+backend-specific behaviour, not something you should need.
+
+Each API issues its own token and rejects the other's, so use
+`MONEYLOVER_WEB_TOKEN` and `MONEYLOVER_MOBILE_TOKEN` if you supply tokens
+directly. A bare `MONEYLOVER_ACCESS_TOKEN` only makes sense with `--backend`.
 
 ## The one thing to know before you start
 

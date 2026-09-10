@@ -73,8 +73,15 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
 
   const backend: Backend = {
     name: "mobile",
-    // No balances in the pull; everything else, including the label layer.
-    can: { balances: false, wallets: false, categories: true, labels: true },
+    can: {
+      // No balance field in the pull, and the wallet push payload is unknown.
+      balances: false,
+      wallets: false,
+      categories: true,
+      labels: true,
+      events: true,
+      batchWrites: true,
+    },
 
     async account(): Promise<Account> {
       const info = unwrap<{ _id: string; email: string; limitDevice?: number }>(

@@ -6,6 +6,7 @@
  */
 
 import type { AuthOptions } from "../api/auth.js";
+import { createCompositeBackend, describeRouting } from "../api/backends/composite.js";
 import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
 import {
@@ -39,18 +40,36 @@ import { type Cache, createCache } from "./cache.js";
 import { createStructureApi } from "./structure.js";
 
 export interface ClientOptions extends Omit<AuthOptions, "backend"> {
-  /** Defaults to `web`, or MONEYLOVER_BACKEND. */
+  /**
+   * Force one API instead of routing per operation.
+   *
+   * The default composes both and sends each call to whichever can do it, so
+   * this is an escape hatch — for reproducing a backend-specific behaviour, or
+   * for pinning a pipeline whose output must not move.
+   */
   backend?: BackendName;
   /** Use this backend instead of constructing one. The seam for testing. */
   use?: Backend;
+  /**
+   * Per-API tokens. Each API issues its own and rejects the other's, so a
+   * single `token` is only unambiguous when `backend` forces one.
+   */
+  webToken?: string;
+  mobileToken?: string;
   /** Seconds to reuse a read. Writes invalidate regardless. 0 disables. */
   cacheSeconds?: number;
 }
 
 export interface MoneyLover {
   readonly backend: BackendName;
-  /** What this backend can do. Check before offering a structure write. */
+  /**
+   * What is reachable with the credentials given. Every operation is routed
+   * to whichever API can do it, so this is for diagnostics — not something a
+   * caller should have to branch on.
+   */
   readonly can: Capabilities;
+  /** Which API served each kind of call. For `whoami` and for bug reports. */
+  readonly routing: Record<string, string>;
 
   account(): ReturnType<Backend["account"]>;
   wallets(): Promise<Wallet[]>;
@@ -85,16 +104,56 @@ export interface MoneyLover {
   lending(person?: string): Promise<PersonBalance[]>;
 }
 
-function resolveBackend(options: ClientOptions): Backend {
-  if (options.use) return options.use;
-  const name = options.backend ?? (process.env.MONEYLOVER_BACKEND as BackendName) ?? "web";
-  if (name === "mobile") return createMobileBackend(options);
-  if (name === "web") return createWebBackend(options);
-  throw new MoneyLoverError(`unknown backend ${JSON.stringify(name)} — use "web" or "mobile"`);
+/** The mobile API needs the Android app's OAuth client, which not everyone has. */
+const mobileConfigured = (): boolean =>
+  Boolean(process.env.MONEYLOVER_MOBILE_CLIENT && process.env.MONEYLOVER_MOBILE_SECRET);
+
+interface Resolved {
+  backend: Backend;
+  /** Which API serves each kind of call, for diagnostics. */
+  routing: Record<string, string>;
+}
+
+function resolveBackend(options: ClientOptions): Resolved {
+  if (options.use) return { backend: options.use, routing: { all: options.use.name } };
+
+  const forced = options.backend ?? (process.env.MONEYLOVER_BACKEND as BackendName | undefined);
+  if (forced === "mobile") {
+    const backend = createMobileBackend(options);
+    return { backend, routing: { all: "mobile (forced)" } };
+  }
+  if (forced === "web") {
+    const backend = createWebBackend(options);
+    return { backend, routing: { all: "web (forced)" } };
+  }
+  if (forced) {
+    throw new MoneyLoverError(`unknown backend ${JSON.stringify(forced)} — use "web" or "mobile"`);
+  }
+
+  /**
+   * Nothing forced: compose whatever is reachable and route per operation.
+   *
+   * A bare `token` is deliberately not passed on here — it belongs to one API
+   * and would be rejected by the other. Each backend takes its own token if
+   * given one, and otherwise uses its own cache or logs in.
+   */
+  const shared = { ...options, token: undefined };
+  const parts = {
+    web: createWebBackend({ ...shared, ...(options.webToken ? { token: options.webToken } : {}) }),
+    ...(mobileConfigured()
+      ? {
+          mobile: createMobileBackend({
+            ...shared,
+            ...(options.mobileToken ? { token: options.mobileToken } : {}),
+          }),
+        }
+      : {}),
+  };
+  return { backend: createCompositeBackend(parts), routing: describeRouting(parts) };
 }
 
 export function createClient(options: ClientOptions = {}): MoneyLover {
-  const backend = resolveBackend(options);
+  const { backend, routing } = resolveBackend(options);
   const cache: Cache = createCache(options.cacheSeconds ?? 60);
 
   const wallets = () => cache.read("wallets", () => backend.wallets());
@@ -118,10 +177,11 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
   return {
     backend: backend.name,
     can: backend.can,
+    routing,
     account: () => cache.read("account", () => backend.account()),
     wallets,
     categories,
-    events: () => cache.read("events", () => backend.events()),
+    events: () => cache.read("events", () => backend.events?.() ?? Promise.resolve([])),
     labels: () => cache.read("labels", () => backend.labels?.() ?? Promise.resolve([])),
     ...structure,
 

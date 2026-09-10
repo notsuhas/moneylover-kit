@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { aCategory, aWallet } from "../../core/__tests__/fixtures.js";
+import { ALL_CAN, aCategory, aWallet, NO_CAN } from "../../core/__tests__/fixtures.js";
 import type { Backend, Capabilities, Category, Wallet } from "../../core/types.js";
 import { createCache } from "../cache.js";
 import { createStructureApi } from "../structure.js";
@@ -8,8 +8,8 @@ import { createStructureApi } from "../structure.js";
 const WALLETS: Wallet[] = [aWallet({ id: "w1", name: "Savings", icon: "icon_1" })];
 const CATEGORIES: Category[] = [aCategory({ id: "c1", name: "Groceries" })];
 
-const ALL: Capabilities = { balances: true, wallets: true, categories: true, labels: true };
-const NONE: Capabilities = { balances: false, wallets: false, categories: false, labels: false };
+const ALL = ALL_CAN;
+const NONE = NO_CAN;
 
 function api(can: Capabilities = ALL) {
   const calls: string[] = [];

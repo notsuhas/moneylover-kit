@@ -1,11 +1,12 @@
 export const USAGE = `moneylover — unofficial Money Lover CLI
 
   moneylover login                      mint and cache a token (registers a device)
-  moneylover whoami                     account, backend, device limit
+  moneylover whoami                     account, device limit, and which API
+                                        serves each operation
   moneylover wallets                    wallets, with balances where available
   moneylover categories                 category names valid for writing
   moneylover events                     event/trip names
-  moneylover labels                     global category records (mobile backend only)
+  moneylover labels                     global category records
 
 Structure
   moneylover add-wallet    --name N --currency 11 [--icon I]
@@ -16,8 +17,9 @@ Structure
   moneylover edit-category --category C [--name N] [--icon I]
   moneylover rm-category   --category C
 
-  --all-wallets and --parent need the mobile backend: an all-wallet or nested
-  category lives in the label layer, which the web API does not model.
+  --all-wallets and --parent need the mobile API, because that shape lives in a
+  layer the web API does not model. Set MONEYLOVER_MOBILE_CLIENT and
+  MONEYLOVER_MOBILE_SECRET and it is used automatically — see \`whoami\`.
 
 Transactions
   moneylover list [filters]             list transactions
@@ -46,7 +48,8 @@ Fields for \`add\` and \`edit\`
   --exclude-report                      keep it out of spending reports
 
 Global
-  --backend web|mobile                  default web, or MONEYLOVER_BACKEND
+  --backend web|mobile                  force one API instead of routing per
+                                        operation; rarely what you want
   --json                                machine-readable output
   --help
 

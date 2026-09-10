@@ -1,6 +1,6 @@
 /** Builders so a test states only the fields it cares about. */
 
-import type { Category, Transaction, Wallet } from "../types.js";
+import type { Capabilities, Category, Transaction, Wallet } from "../types.js";
 
 export const aCategory = (over: Partial<Category> & { id: string; name: string }): Category => ({
   icon: "icon_1",
@@ -40,3 +40,47 @@ export const lendingCategories: Category[] = [
   aCategory({ id: "repay", name: "Repayment", metadata: "IS_REPAYMENT" }),
   aCategory({ id: "food", name: "Groceries" }),
 ];
+
+/**
+ * Capability sets, in one place.
+ *
+ * Adding a capability used to mean hunting down every inline literal in every
+ * test; these exist so the compiler points at one file instead.
+ */
+export const WEB_CAN: Capabilities = {
+  balances: true,
+  wallets: true,
+  categories: true,
+  labels: false,
+  events: false,
+  batchWrites: false,
+};
+
+export const MOBILE_CAN: Capabilities = {
+  balances: false,
+  wallets: false,
+  categories: true,
+  labels: true,
+  events: true,
+  batchWrites: true,
+};
+
+/** Everything on, for testing a client rather than a real backend's limits. */
+export const ALL_CAN: Capabilities = {
+  balances: true,
+  wallets: true,
+  categories: true,
+  labels: true,
+  events: true,
+  batchWrites: true,
+};
+
+/** Nothing on, for testing that a guard actually fires. */
+export const NO_CAN: Capabilities = {
+  balances: false,
+  wallets: false,
+  categories: false,
+  labels: false,
+  events: false,
+  batchWrites: false,
+};

@@ -168,12 +168,24 @@ export interface AuthOptions {
   noLogin?: boolean;
 }
 
+/**
+ * A token belongs to one API, not both.
+ *
+ * The two clients issue separate tokens and each rejects the other's, so a
+ * single `MONEYLOVER_ACCESS_TOKEN` cannot serve a client that talks to both.
+ * `MONEYLOVER_WEB_TOKEN` and `MONEYLOVER_MOBILE_TOKEN` are checked first; the
+ * generic one is a convenience for the single-backend case.
+ */
 function fromEnv(options: AuthOptions): AuthOptions {
+  const specific =
+    options.backend === "mobile"
+      ? process.env.MONEYLOVER_MOBILE_TOKEN
+      : process.env.MONEYLOVER_WEB_TOKEN;
   return {
     ...options,
     email: options.email ?? process.env.MONEYLOVER_EMAIL,
     password: options.password ?? process.env.MONEYLOVER_PASSWORD,
-    token: options.token ?? process.env.MONEYLOVER_ACCESS_TOKEN,
+    token: options.token ?? specific ?? process.env.MONEYLOVER_ACCESS_TOKEN,
   };
 }
 

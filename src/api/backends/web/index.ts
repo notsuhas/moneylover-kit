@@ -9,7 +9,6 @@
 import {
   day,
   kind,
-  normaliseEvent,
   normaliseTransaction,
   normaliseWallet,
   type WireTransaction,
@@ -20,7 +19,6 @@ import {
   type Account,
   type Backend,
   type Category,
-  type Event,
   MoneyLoverError,
   type NewTransaction,
   type Transaction,
@@ -66,7 +64,16 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
 
   const backend: Backend = {
     name: "web",
-    can: { balances: true, wallets: true, categories: true, labels: false },
+    can: {
+      balances: true,
+      wallets: true,
+      categories: true,
+      labels: false,
+      // Every web route for events 404s, and `/event/list/full` answers
+      // `sync_error_have_not_permission`. Verified against a live account.
+      events: false,
+      batchWrites: false,
+    },
 
     async account(): Promise<Account> {
       const info = await call<{ _id: string; email: string; limitDevice?: number }>("/user/info");
@@ -90,10 +97,6 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
 
     async transactions(): Promise<Transaction[]> {
       return (await call<WireTransaction[]>("/transaction/list-all")).map(normaliseTransaction);
-    },
-
-    async events(): Promise<Event[]> {
-      return (await call<{ _id: string; name: string }[]>("/event/list")).map(normaliseEvent);
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {

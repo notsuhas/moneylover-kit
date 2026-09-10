@@ -5,13 +5,14 @@ import {
   aTransaction,
   aWallet,
   lendingCategories,
+  WEB_CAN,
 } from "../../core/__tests__/fixtures.js";
 import type { Backend } from "../../core/types.js";
 import { createMcpServer } from "../server.js";
 
 const backend: Backend = {
   name: "web",
-  can: { balances: true, wallets: true, categories: true, labels: false },
+  can: WEB_CAN,
   account: async () => ({ id: "u1", email: "a@b.c", deviceLimit: 5 }),
   wallets: async () => [aWallet({ id: "w1", name: "Savings", balance: { INR: "10.00" } })],
   categories: async () => [...lendingCategories, aCategory({ id: "c1", name: "Groceries" })],

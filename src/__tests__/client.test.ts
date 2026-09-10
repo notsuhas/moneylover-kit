@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createClient } from "../client/index.js";
-import { aCategory, aTransaction, aWallet, lendingCategories } from "../core/__tests__/fixtures.js";
+import {
+  aCategory,
+  aTransaction,
+  aWallet,
+  lendingCategories,
+  WEB_CAN,
+} from "../core/__tests__/fixtures.js";
 import type { Backend, NewTransaction, Transaction, TransactionPatch } from "../core/types.js";
 
 /** A backend that records what it was asked, so the composition is testable. */
@@ -12,7 +18,7 @@ function fakeBackend(seed: Transaction[] = []) {
 
   const backend: Backend = {
     name: "web",
-    can: { balances: true, wallets: true, categories: true, labels: false },
+    can: WEB_CAN,
     account: async () => ({ id: "u1", email: "a@b.c", deviceLimit: 5 }),
     wallets: async () => {
       calls.wallets += 1;
