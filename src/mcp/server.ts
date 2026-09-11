@@ -15,8 +15,29 @@ import { registerReferenceTools } from "./tools/reference.js";
 import { registerStructureTools, structureAllowed } from "./tools/structure.js";
 import { type Rendering, registerTransactionTools } from "./tools/transactions.js";
 
+/**
+ * How long the MCP server reuses a read.
+ *
+ * Longer than the library default because this process is long-lived and the
+ * expensive reads — the whole transaction list, the whole category list —
+ * barely change. Writes invalidate regardless, so a stale row is not a risk;
+ * the only cost is that a change made in the phone app takes a few minutes to
+ * appear.
+ */
+const CACHE_SECONDS = 300;
+
 export function createMcpServer(options: ClientOptions = {}): McpServer {
-  const client: MoneyLover = createClient(options);
+  const client: MoneyLover = createClient({ cacheSeconds: CACHE_SECONDS, ...options });
+
+  /**
+   * Warm the caches at startup, off the critical path.
+   *
+   * The first tool call otherwise pays for the login plus the wallet and
+   * category lists — measured at 28s cold, which a 30s gateway timeout kills.
+   * Failures are ignored: this is an optimisation, and the real call will
+   * report a genuine problem properly.
+   */
+  void Promise.all([client.wallets(), client.categories(), client.transactions()]).catch(() => {});
   const server = new McpServer(
     { name: "moneylover", version: "0.1.0" },
     { instructions: INSTRUCTIONS },

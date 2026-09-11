@@ -17,7 +17,7 @@ import {
   lendingSummary,
   type PersonBalance,
 } from "../core/lending.js";
-import { categoryIndex, filterTransactions, findWallet } from "../core/query.js";
+import { categoryIndex, filterTransactions, findCategory, findWallet } from "../core/query.js";
 import type {
   Backend,
   BackendName,
@@ -173,10 +173,18 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     return row;
   }
 
-  /** Re-read after a write, so callers always see committed state. */
-  async function reread(id: string): Promise<Transaction> {
+  /**
+   * Describe a written row without reading it back.
+   *
+   * Reading it back would be more honest, but there is no get-by-id on either
+   * API — the only read is the whole account — so a re-read costs 10-18s and
+   * pushed every write past a 30s gateway timeout. The push already succeeded
+   * or threw, so the fields are known; this reports them and drops the cache
+   * so the next read is fresh.
+   */
+  function described(row: Transaction): Transaction {
     forgetTransactions();
-    return transaction(id);
+    return row;
   }
 
   const structure = createStructureApi({ backend, cache, wallets, categories });
@@ -222,19 +230,48 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     transaction,
 
     async addTransaction(input: NewTransaction): Promise<Transaction> {
-      return reread(await backend.addTransaction(input));
+      const [wallet, category] = await Promise.all([
+        findWallet(await wallets(), input.wallet),
+        findCategory(await categories(), input.category),
+      ]);
+      const id = await backend.addTransaction(input);
+      return described({
+        id,
+        date: input.date ?? new Date().toISOString().slice(0, 10),
+        amount: input.amount,
+        note: input.note ?? "",
+        walletId: wallet.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        type: category.type,
+        people: input.people ?? [],
+        eventIds: input.eventId ? [input.eventId] : [],
+        excludeReport: Boolean(input.excludeReport),
+      });
     },
 
     async editTransaction(id: string, patch: TransactionPatch): Promise<Transaction> {
+      const before = await transaction(id);
+      const category = patch.category ? findCategory(await categories(), patch.category) : null;
       await backend.editTransaction(id, patch);
-      return reread(id);
+      return described({
+        ...before,
+        ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
+        ...(patch.note !== undefined ? { note: patch.note } : {}),
+        ...(patch.date !== undefined ? { date: patch.date } : {}),
+        ...(patch.people !== undefined ? { people: patch.people } : {}),
+        ...(patch.excludeReport !== undefined ? { excludeReport: patch.excludeReport } : {}),
+        ...(patch.eventId !== undefined ? { eventIds: patch.eventId ? [patch.eventId] : [] } : {}),
+        ...(category
+          ? { categoryId: category.id, categoryName: category.name, type: category.type }
+          : {}),
+      });
     },
 
     async deleteTransaction(id: string): Promise<Transaction> {
       const row = await transaction(id);
       await backend.deleteTransaction(id);
-      forgetTransactions();
-      return row;
+      return described(row);
     },
 
     async retag(plan: RetagEntry[]): Promise<number> {
@@ -262,17 +299,28 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       }
       const wallet = findWallet(await wallets(), input.wallet);
       const category = lendingCategory(await categories(), kind, wallet.id);
-      const outgoing = category.type === "expense";
-      return reread(
-        await backend.addTransaction({
-          wallet: wallet.id,
-          category: category.id,
-          amount: outgoing ? -input.amount : input.amount,
-          people: [input.person],
-          ...(input.note !== undefined ? { note: input.note } : {}),
-          ...(input.date !== undefined ? { date: input.date } : {}),
-        }),
-      );
+      const amount = category.type === "expense" ? -input.amount : input.amount;
+      const id = await backend.addTransaction({
+        wallet: wallet.id,
+        category: category.id,
+        amount,
+        people: [input.person],
+        ...(input.note !== undefined ? { note: input.note } : {}),
+        ...(input.date !== undefined ? { date: input.date } : {}),
+      });
+      return described({
+        id,
+        date: input.date ?? new Date().toISOString().slice(0, 10),
+        amount,
+        note: input.note ?? "",
+        walletId: wallet.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        type: category.type,
+        people: [input.person],
+        eventIds: [],
+        excludeReport: false,
+      });
     },
 
     async lending(person?: string): Promise<PersonBalance[]> {
