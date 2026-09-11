@@ -1,10 +1,10 @@
 /**
- * Wallet and category management over MCP.
+ * Creating and editing wallets and categories over MCP.
  *
- * Off by default. These reshape the account rather than record something that
- * happened, and deleting a wallet takes its transactions with it — not the
- * blast radius you want on an endpoint reachable from the internet. Set
- * MONEYLOVER_MCP_ALLOW_STRUCTURE=1 to register them.
+ * Off by default: these reshape the account rather than record something that
+ * happened, and an edit is a full replace, so a wrong currency id reinterprets
+ * every amount in a wallet. Set MONEYLOVER_MCP_ALLOW_STRUCTURE=1 to register
+ * them. Deleting is gated separately again — see deletions.ts.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -74,18 +74,6 @@ export function registerStructureTools(server: McpServer, client: MoneyLover): v
   );
 
   server.registerTool(
-    "delete_wallet",
-    {
-      title: "Delete a wallet",
-      description:
-        "Delete a wallet AND every transaction in it. This cannot be undone and it is not " +
-        "a small change — confirm the wallet and its balance with the user first.",
-      inputSchema: { wallet: z.string().describe("Wallet name, spelled out") },
-    },
-    async ({ wallet }) => json({ deleted: await client.deleteWallet(wallet) }),
-  );
-
-  server.registerTool(
     "add_category",
     {
       title: "Create a category",
@@ -123,17 +111,5 @@ export function registerStructureTools(server: McpServer, client: MoneyLover): v
       }
       return json({ updated: await client.editCategory(category, patch) });
     },
-  );
-
-  server.registerTool(
-    "delete_category",
-    {
-      title: "Delete a category",
-      description:
-        "Delete a category. Transactions that used it are left alone and will show as " +
-        "uncategorised, so retag them first if that matters.",
-      inputSchema: { category: z.string() },
-    },
-    async ({ category }) => json({ deleted: await client.deleteCategory(category) }),
   );
 }

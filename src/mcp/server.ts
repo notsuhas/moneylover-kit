@@ -1,15 +1,18 @@
 /**
  * The MCP tool surface.
  *
- * Transactions and lending are always available. Wallet and category writes
- * are registered only when MONEYLOVER_MCP_ALLOW_STRUCTURE=1, because they
- * reshape the account — deleting a wallet takes its transactions with it.
+ * Transactions and lending are always available. Creating and editing wallets
+ * and categories needs MONEYLOVER_MCP_ALLOW_STRUCTURE=1, because those reshape
+ * the account. Deleting one is a separate flag again,
+ * MONEYLOVER_MCP_ALLOW_DELETE=1, because it is the only thing here that cannot
+ * be walked back.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { type ClientOptions, createClient, type MoneyLover } from "../client/index.js";
 import type { Transaction } from "../core/types.js";
 import { INSTRUCTIONS, naming } from "./present.js";
+import { deletionsAllowed, registerDeletionTools } from "./tools/deletions.js";
 import { registerLendingTools } from "./tools/lending.js";
 import { registerReferenceTools } from "./tools/reference.js";
 import { registerStructureTools, structureAllowed } from "./tools/structure.js";
@@ -60,8 +63,9 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
   registerReferenceTools(server, client);
   registerTransactionTools(server, client, show);
   registerLendingTools(server, client, show);
-  // Reshaping the account is opt-in; see tools/structure.ts.
+  // Both opt-in, and independently; see tools/structure.ts and tools/deletions.ts.
   if (structureAllowed()) registerStructureTools(server, client);
+  if (deletionsAllowed()) registerDeletionTools(server, client);
 
   return server;
 }

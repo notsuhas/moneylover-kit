@@ -13,19 +13,34 @@ Eight tools over a live account. Two transports, same tools.
 | `record_lending` | lend, collect, borrow or repay, against a person |
 | `lending_summary` | net position per person, across wallets |
 
-Those eight are always available. Wallet and category management is registered
-only when `MONEYLOVER_MCP_ALLOW_STRUCTURE=1`:
+Those eight are always available. Managing wallets and categories is opt-in,
+behind two flags rather than one, because the risk is not evenly spread.
+
+`MONEYLOVER_MCP_ALLOW_STRUCTURE=1` adds creating and editing:
 
 | Tool | Does |
 |---|---|
 | `list_currencies_hint` | the numeric currency ids in use, for `add_wallet` |
-| `add_wallet` · `edit_wallet` · `delete_wallet` | manage accounts |
-| `add_category` · `edit_category` · `delete_category` | manage categories, including all-wallet and nested ones |
+| `add_wallet` · `edit_wallet` | create a wallet, or change its name, icon or currency |
+| `add_category` · `edit_category` | create a category, including all-wallet and nested ones, or rename it |
 
-They are off by default deliberately. These reshape the account rather than
-record something that happened, and `delete_wallet` takes every transaction in
-that wallet with it — not a blast radius you want reachable from the internet
-by default.
+`MONEYLOVER_MCP_ALLOW_DELETE=1` adds the two that cannot be undone:
+
+| Tool | Does |
+|---|---|
+| `delete_wallet` | delete a wallet **and every transaction in it** |
+| `delete_category` | delete a category, leaving its transactions uncategorised |
+
+The flags are independent. Creating and renaming is recoverable by hand —
+`add_wallet` at worst leaves clutter, and a rename can be typed back — so a
+sensible setup for an agent is structure on, delete off. Deleting has no undo on
+either API, which makes it the one thing worth a second switch.
+
+Two things to know before turning either on. `edit_wallet` writes
+`currency_id`, and changing it does not convert anything: every amount in that
+wallet is simply reinterpreted, and nothing records what the old value was.
+And a category lives once per wallet, so a rename is one write per wallet plus
+the label — a partial failure leaves wallets disagreeing with each other.
 
 ## Local — Claude Desktop, Cursor, Claude Code
 
@@ -113,9 +128,9 @@ asks for confirmation first; in a client that supports per-tool approval, put
 row, so this re-reads and rebuilds it. That means an edit is safe, but it is
 also two round trips — don't loop it over hundreds of rows.
 
-**Reads are cached for a minute**, and writes invalidate the cache. So a search
-immediately after an edit reflects the edit, but a change made in the phone app
-may take up to a minute to show up.
+**Reads are cached for five minutes**, and writes invalidate the cache. So a
+search immediately after an edit reflects the edit, but a change made in the
+phone app can take that long to show up.
 
 ## Troubleshooting
 
