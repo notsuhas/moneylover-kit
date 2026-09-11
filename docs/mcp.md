@@ -49,7 +49,7 @@ the label — a partial failure leaves wallets disagreeing with each other.
   "mcpServers": {
     "moneylover": {
       "command": "npx",
-      "args": ["-y", "-p", "moneylover-kit", "moneylover-mcp"],
+      "args": ["-y", "-p", "@notsuhas/moneylover-kit", "moneylover-mcp"],
       "env": {
         "MONEYLOVER_EMAIL": "you@example.com",
         "MONEYLOVER_PASSWORD": "…"

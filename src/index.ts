@@ -2,7 +2,7 @@
  * moneylover-kit — unofficial Money Lover client.
  *
  * ```ts
- * import { createClient } from "moneylover-kit";
+ * import { createClient } from "@notsuhas/moneylover-kit";
  *
  * const ml = createClient();               // MONEYLOVER_EMAIL / MONEYLOVER_PASSWORD
  * await ml.wallets();

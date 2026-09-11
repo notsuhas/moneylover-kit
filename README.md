@@ -1,5 +1,7 @@
 # moneylover-kit
 
+[![npm](https://img.shields.io/npm/v/@notsuhas/moneylover-kit)](https://www.npmjs.com/package/@notsuhas/moneylover-kit)
+
 Unofficial [Money Lover](https://moneylover.me) client, CLI and MCP server. Full
 transaction CRUD, lending, and a documented API — from your email and password,
 with nothing else to set up.
@@ -23,7 +25,7 @@ See [docs/traps.md](docs/traps.md).
 ## Install
 
 ```bash
-npm install -g moneylover-kit    # or npx moneylover-kit
+npm install -g @notsuhas/moneylover-kit    # or npx @notsuhas/moneylover-kit
 ```
 
 To run it from source instead, clone and build —
@@ -115,7 +117,7 @@ neither API has an undo, which is why it is its own switch.
   "mcpServers": {
     "moneylover": {
       "command": "npx",
-      "args": ["-y", "-p", "moneylover-kit", "moneylover-mcp"],
+      "args": ["-y", "-p", "@notsuhas/moneylover-kit", "moneylover-mcp"],
       "env": {
         "MONEYLOVER_EMAIL": "you@example.com",
         "MONEYLOVER_PASSWORD": "…"
@@ -141,7 +143,7 @@ irreversible: [docs/mcp.md](docs/mcp.md).
 ## Library
 
 ```ts
-import { createClient } from "moneylover-kit";
+import { createClient } from "@notsuhas/moneylover-kit";
 
 const ml = createClient();
 
