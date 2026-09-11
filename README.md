@@ -169,6 +169,13 @@ operation to whichever can actually do it:
 | category writes    | mobile    | writes both layers, so nesting and all-wallet work  |
 | wallet writes      | web       | the only one whose payloads are known               |
 
+Those last two are worth explaining: **neither API can read a single
+transaction.** The only read is "every transaction" — one request on web, 45
+paginated pulls on mobile — and a full-replace write has to start from the live
+row. So a single edit costs a whole-account read, and it matters which API pays
+for it: routing edits to mobile measured 30s+, past a typical gateway timeout,
+while web reuses the list the search already fetched and comes in around 10s.
+
 That routing is measured, not assumed: wallet and transaction ids are identical
 across both APIs (13/13 and 11,194/11,194 on a real account), which is what
 makes it safe to read from one and write to the other. Category ids are _not_

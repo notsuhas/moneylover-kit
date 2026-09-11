@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ALL_CAN, aCategory, aWallet, NO_CAN } from "../../core/__tests__/fixtures.js";
+import { createCache } from "../../core/cache.js";
 import type { Backend, Capabilities, Category, Wallet } from "../../core/types.js";
-import { createCache } from "../cache.js";
 import { createStructureApi } from "../structure.js";
 
 const WALLETS: Wallet[] = [aWallet({ id: "w1", name: "Savings", icon: "icon_1" })];

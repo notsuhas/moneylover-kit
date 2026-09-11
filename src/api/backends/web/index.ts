@@ -6,6 +6,7 @@
  * `resolveCategory` below, and its structure writes live in structure.ts.
  */
 
+import { type Cache, createCache } from "../../../core/cache.js";
 import {
   day,
   kind,
@@ -37,8 +38,19 @@ interface RawCategory {
   metadata?: string;
 }
 
-export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
+export function createWebBackend(
+  auth: Omit<AuthOptions, "backend">,
+  /**
+   * Shared with the client, so an edit reuses the list the search already
+   * fetched. Neither API can read one transaction, so without this every
+   * single-row write refetches the whole account.
+   */
+  cache: Cache = createCache(60),
+): Backend {
   const call = createCall(auth);
+  const rows = () =>
+    cache.read("web:transactions", () => call<WireTransaction[]>("/transaction/list-all"));
+  const cats = () => cache.read("web:categories", () => call<RawCategory[]>("/category/list-all"));
 
   /**
    * Resolve a category id for a write.
@@ -54,10 +66,12 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
     return findCategory(await backend.categories(), value);
   }
 
+  /** A write changed the account, so the cached lists are stale. */
+  const invalidate = () => cache.drop("web:transactions");
+
   /** `transaction/edit` is a full replace, so an edit must resend the whole row. */
   async function rowFor(id: string): Promise<WireTransaction> {
-    const rows = await call<WireTransaction[]>("/transaction/list-all");
-    const row = rows.find((t) => t._id === id);
+    const row = (await rows()).find((t) => t._id === id);
     if (!row) throw new MoneyLoverError(`no transaction ${id}`);
     return row;
   }
@@ -85,7 +99,7 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
     },
 
     async categories(): Promise<Category[]> {
-      const raw = await call<RawCategory[]>("/category/list-all");
+      const raw = await cats();
       return raw.map((c) => ({
         id: c._id,
         name: c.name,
@@ -96,7 +110,7 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
     },
 
     async transactions(): Promise<Transaction[]> {
-      return (await call<WireTransaction[]>("/transaction/list-all")).map(normaliseTransaction);
+      return (await rows()).map(normaliseTransaction);
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {
@@ -119,6 +133,7 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
         addressIcon: "",
         image: "",
       });
+      invalidate();
       return created._id;
     },
 
@@ -162,11 +177,13 @@ export function createWebBackend(auth: Omit<AuthOptions, "backend">): Backend {
         remind: row.remind ?? 0,
         metadata: row.metadata ?? "",
       });
+      invalidate();
     },
 
     async deleteTransaction(id: string): Promise<void> {
       await rowFor(id);
       await call("/transaction/delete", { _id: id, delRelated: false });
+      invalidate();
     },
 
     ...createStructure({

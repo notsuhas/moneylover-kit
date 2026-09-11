@@ -296,6 +296,22 @@ cross-API handle for a category is its name.
 `sync_error_have_not_permission`. Events come from
 `sync/pull/campaign/v2` on mobile or not at all.
 
+### You cannot read one transaction
+
+There is no get-by-id on either API. The only read is the whole account:
+`transaction/list-all` on web (one request) or `sync/pull/transaction/v2` on
+mobile (45 paginated pulls for ~11k rows). Combined with the full-replace write
+format — which means an edit *must* start from the live row — a single-row edit
+costs a whole-account read.
+
+Measured on ~11k transactions: a single edit takes 30s+ through the mobile pull
+and about 10s through web when the list is already cached. If you are putting
+this behind a gateway with a 30s tool timeout, that difference is the
+difference between working and not.
+
+So: cache the list across reads *and* writes, and do single-row writes on
+whichever API your reads already use.
+
 ### Balances in different currencies are not comparable
 
 A wallet carries a numeric `currency_id` and nothing converts between them.

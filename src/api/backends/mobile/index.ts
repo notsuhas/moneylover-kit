@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { type Cache, createCache } from "../../../core/cache.js";
 import {
   kind,
   normaliseEvent,
@@ -61,12 +62,18 @@ interface RawLabel {
 
 const gid = (): string => randomUUID().replace(/-/g, "");
 
-export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend {
+export function createMobileBackend(
+  auth: Omit<AuthOptions, "backend">,
+  /** Shared with the client; see core/cache.ts for why this is load-bearing. */
+  cache: Cache = createCache(60),
+): Backend {
   const { call, pull, push, page } = createSync(auth);
+  const rows = () =>
+    cache.read("mobile:transactions", () => pull<RawTransaction>("/api/sync/pull/transaction/v2"));
+  const invalidate = () => cache.drop("mobile:transactions");
 
   async function rowFor(id: string): Promise<RawTransaction> {
-    const rows = await pull<RawTransaction>("/api/sync/pull/transaction/v2");
-    const row = rows.find((t) => t._id === id && !t.isDelete);
+    const row = (await rows()).find((t) => t._id === id && !t.isDelete);
     if (!row) throw new MoneyLoverError(`no transaction ${id}`);
     return row;
   }
@@ -128,8 +135,7 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
     },
 
     async transactions(): Promise<Transaction[]> {
-      const raw = await pull<RawTransaction>("/api/sync/pull/transaction/v2");
-      return raw.filter((t) => !t.isDelete).map(normaliseTransaction);
+      return (await rows()).filter((t) => !t.isDelete).map(normaliseTransaction);
     },
 
     async events(): Promise<Event[]> {
@@ -163,6 +169,7 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
           version: 0,
         } satisfies PushItem,
       ]);
+      invalidate();
       return id;
     },
 
@@ -180,6 +187,7 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
       if (patch.eventId !== undefined) item.cp = patch.eventId ? [patch.eventId] : [];
       if (patch.excludeReport !== undefined) item.er = patch.excludeReport;
       await push("transaction", [item]);
+      invalidate();
     },
 
     /**
@@ -188,19 +196,17 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
      * actually needs.
      */
     async retagTransactions(plan: RetagEntry[]): Promise<number> {
-      const rows = new Map(
-        (await pull<RawTransaction>("/api/sync/pull/transaction/v2"))
-          .filter((t) => !t.isDelete)
-          .map((t) => [t._id, t]),
-      );
+      const byId = new Map((await rows()).filter((t) => !t.isDelete).map((t) => [t._id, t]));
       const cats = await backend.categories();
       const items = plan.map(({ id, category }) => {
-        const row = rows.get(id);
+        const row = byId.get(id);
         if (!row) throw new MoneyLoverError(`no transaction ${id}`);
         const target = findCategory(cats, category, row.account._id);
         return itemFrom(row, target.id, 2);
       });
-      return push("transaction", items);
+      const written = await push("transaction", items);
+      invalidate();
+      return written;
     },
 
     async deleteTransaction(id: string): Promise<void> {
@@ -208,6 +214,7 @@ export function createMobileBackend(auth: Omit<AuthOptions, "backend">): Backend
       await push("transaction", [
         { ...itemFrom(row, row.category._id, 3), version: 1, isDelete: true },
       ]);
+      invalidate();
     },
 
     ...createStructure({

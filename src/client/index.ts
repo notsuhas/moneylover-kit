@@ -9,6 +9,7 @@ import type { AuthOptions } from "../api/auth.js";
 import { createCompositeBackend, describeRouting } from "../api/backends/composite.js";
 import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
+import { type Cache, createCache } from "../core/cache.js";
 import {
   type LendingInput,
   type LendingKind,
@@ -36,7 +37,6 @@ import type {
   WalletPatch,
 } from "../core/types.js";
 import { MoneyLoverError } from "../core/types.js";
-import { type Cache, createCache } from "./cache.js";
 import { createStructureApi } from "./structure.js";
 
 export interface ClientOptions extends Omit<AuthOptions, "backend"> {
@@ -114,17 +114,15 @@ interface Resolved {
   routing: Record<string, string>;
 }
 
-function resolveBackend(options: ClientOptions): Resolved {
+function resolveBackend(options: ClientOptions, cache: Cache): Resolved {
   if (options.use) return { backend: options.use, routing: { all: options.use.name } };
 
   const forced = options.backend ?? (process.env.MONEYLOVER_BACKEND as BackendName | undefined);
   if (forced === "mobile") {
-    const backend = createMobileBackend(options);
-    return { backend, routing: { all: "mobile (forced)" } };
+    return { backend: createMobileBackend(options, cache), routing: { all: "mobile (forced)" } };
   }
   if (forced === "web") {
-    const backend = createWebBackend(options);
-    return { backend, routing: { all: "web (forced)" } };
+    return { backend: createWebBackend(options, cache), routing: { all: "web (forced)" } };
   }
   if (forced) {
     throw new MoneyLoverError(`unknown backend ${JSON.stringify(forced)} — use "web" or "mobile"`);
@@ -139,13 +137,16 @@ function resolveBackend(options: ClientOptions): Resolved {
    */
   const shared = { ...options, token: undefined };
   const parts = {
-    web: createWebBackend({ ...shared, ...(options.webToken ? { token: options.webToken } : {}) }),
+    web: createWebBackend(
+      { ...shared, ...(options.webToken ? { token: options.webToken } : {}) },
+      cache,
+    ),
     ...(mobileConfigured()
       ? {
-          mobile: createMobileBackend({
-            ...shared,
-            ...(options.mobileToken ? { token: options.mobileToken } : {}),
-          }),
+          mobile: createMobileBackend(
+            { ...shared, ...(options.mobileToken ? { token: options.mobileToken } : {}) },
+            cache,
+          ),
         }
       : {}),
   };
@@ -153,12 +154,18 @@ function resolveBackend(options: ClientOptions): Resolved {
 }
 
 export function createClient(options: ClientOptions = {}): MoneyLover {
-  const { backend, routing } = resolveBackend(options);
   const cache: Cache = createCache(options.cacheSeconds ?? 60);
+  const { backend, routing } = resolveBackend(options, cache);
 
+  // The backends cache the raw lists under their own keys; these memoise the
+  // normalised view on top, and a write drops both.
   const wallets = () => cache.read("wallets", () => backend.wallets());
   const categories = () => cache.read("categories", () => backend.categories());
   const allTransactions = () => cache.read("transactions", () => backend.transactions());
+
+  /** A transaction write invalidates the normalised view and both raw lists. */
+  const forgetTransactions = () =>
+    cache.drop("transactions", "web:transactions", "mobile:transactions");
 
   async function transaction(id: string): Promise<Transaction> {
     const row = (await allTransactions()).find((t) => t.id === id);
@@ -168,7 +175,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
 
   /** Re-read after a write, so callers always see committed state. */
   async function reread(id: string): Promise<Transaction> {
-    cache.drop("transactions");
+    forgetTransactions();
     return transaction(id);
   }
 
@@ -226,7 +233,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     async deleteTransaction(id: string): Promise<Transaction> {
       const row = await transaction(id);
       await backend.deleteTransaction(id);
-      cache.drop("transactions");
+      forgetTransactions();
       return row;
     },
 
@@ -235,7 +242,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       const batched = backend.retagTransactions;
       if (batched) {
         const written = await batched.call(backend, plan);
-        cache.drop("transactions");
+        forgetTransactions();
         return written;
       }
       // No batching here, so this is thousands of round trips. Sequential on
@@ -243,7 +250,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       for (const { id, category } of plan) {
         await backend.editTransaction(id, { category });
       }
-      cache.drop("transactions");
+      forgetTransactions();
       return plan.length;
     },
 

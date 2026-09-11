@@ -7,6 +7,7 @@
  * than a TypeError.
  */
 
+import type { Cache } from "../core/cache.js";
 import { findCategory, findWallet } from "../core/query.js";
 import type {
   Backend,
@@ -19,7 +20,6 @@ import type {
   WalletPatch,
 } from "../core/types.js";
 import { MoneyLoverError } from "../core/types.js";
-import type { Cache } from "./cache.js";
 
 export interface StructureDeps {
   backend: Backend;
@@ -44,7 +44,16 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
    * deleting a wallet deletes its transactions server-side, so a cached
    * transaction list would keep returning rows that no longer exist.
    */
-  const invalidate = () => cache.drop("wallets", "categories", "labels", "transactions");
+  const invalidate = () =>
+    cache.drop(
+      "wallets",
+      "categories",
+      "labels",
+      "transactions",
+      "web:transactions",
+      "web:categories",
+      "mobile:transactions",
+    );
 
   async function walletById(id: string): Promise<Wallet> {
     const hit = (await wallets()).find((w) => w.id === id);

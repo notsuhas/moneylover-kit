@@ -112,18 +112,24 @@ describe("createCompositeBackend — reads", () => {
 });
 
 describe("createCompositeBackend — writes", () => {
-  it("sends transaction writes to mobile, which fails safe and batches", async () => {
+  /**
+   * Single writes go to web so the read the search already paid for is reused;
+   * routing them to mobile meant a second 45-page pull and a 30s+ edit.
+   */
+  it("sends single transaction writes to web", async () => {
     const { web, mobile, composite } = both();
     await composite.addTransaction({ wallet: "w", category: "c", amount: -1 });
     await composite.editTransaction("t", { note: "x" });
     await composite.deleteTransaction("t");
+    assert.deepEqual(web.calls, ["addTransaction", "editTransaction", "deleteTransaction"]);
+    assert.deepEqual(mobile.calls, []);
+  });
+
+  /** Batching 50 items per request is worth the one-off read. */
+  it("sends a bulk retag to mobile, where batching pays for itself", async () => {
+    const { web, mobile, composite } = both();
     await composite.retagTransactions?.([{ id: "t", category: "c" }]);
-    assert.deepEqual(mobile.calls, [
-      "addTransaction",
-      "editTransaction",
-      "deleteTransaction",
-      "retagTransactions",
-    ]);
+    assert.deepEqual(mobile.calls, ["retagTransactions"]);
     assert.deepEqual(web.calls, []);
   });
 
@@ -199,7 +205,8 @@ describe("describeRouting", () => {
     const routing = describeRouting({ web: web.backend, mobile: mobile.backend });
     assert.equal(routing.wallets, "web");
     assert.equal(routing.categories, "mobile");
-    assert.equal(routing.transactionWrites, "mobile");
+    assert.equal(routing.transactionWrites, "web");
+    assert.equal(routing.batchedWrites, "mobile");
     assert.equal(routing.walletWrites, "web");
   });
 
@@ -251,7 +258,7 @@ describe("createCompositeBackend — mobile failing over to web", () => {
     assert.deepEqual(web.calls, ["categories"]);
   });
 
-  it("keeps transaction writes working on web", async () => {
+  it("keeps transaction writes working — they were already on web", async () => {
     const { web, composite } = failingMobile();
     await quiet(() => composite.addTransaction({ wallet: "w", category: "c", amount: -1 }));
     assert.deepEqual(web.calls, ["addTransaction"]);
@@ -276,16 +283,13 @@ describe("createCompositeBackend — mobile failing over to web", () => {
     const mobile = spy("mobile", MOBILE_CAN);
     const broken: Backend = {
       ...mobile.backend,
-      addTransaction: async () => {
-        throw new Error("amount cannot be zero");
+      categories: async () => {
+        throw new Error("something genuinely wrong");
       },
     };
     const web = spy("web", WEB_CAN);
     const composite = createCompositeBackend({ web: web.backend, mobile: broken });
-    await assert.rejects(
-      () => composite.addTransaction({ wallet: "w", category: "c", amount: 0 }),
-      /amount cannot be zero/,
-    );
+    await assert.rejects(() => composite.categories(), /something genuinely wrong/);
     assert.deepEqual(web.calls, [], "must not retry a genuine error on the other API");
   });
 });

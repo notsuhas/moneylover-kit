@@ -12,14 +12,16 @@
  *
  *   wallets       web     the only source of balances; all 13 ids identical
  *   transactions  web     one request vs 45 paginated pulls; all 11,194 ids identical
+ *   txn writes    web     a full-replace write needs the live row, and reads are
+ *                         already on web — so the cached list is reused instead
+ *                         of paying for a second, 45-page pull
+ *   bulk retag    mobile  50 items per request, which is the whole point
  *   categories    mobile  its per-wallet ids are the ones transaction rows
  *                         reference on *both* APIs (11,194/11,194). Web's
  *                         `category/list-all` returns a different, global set
  *                         that matches no transaction at all.
  *   events        mobile  every web route for these 404s
  *   labels        mobile  the web API does not model the layer
- *   txn writes    mobile  rejected items come back in `failedItems` instead of
- *                         being applied, batches, and has no wrong-id hang
  *   cat writes    mobile  writes both layers, so nesting and all-wallet work
  *   wallet writes web     the only one whose payloads are known
  *
@@ -122,7 +124,21 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
   };
 
   const writes = {
-    transactions: route(mobile, web, "transaction writes"),
+    /**
+     * Single writes go to **web**, batches to mobile.
+     *
+     * Neither API can read one transaction, and a full-replace write has to
+     * start from the live row — so an edit costs one whole-account read. Reads
+     * are already served by web, so routing single writes there reuses that
+     * list from cache; routing them to mobile meant a second, 45-page pull.
+     * Measured: 30s+ per edit against mobile, which a 30s gateway timeout
+     * kills, versus a cache hit plus one request against web.
+     *
+     * Mobile keeps the bulk path, where batching 50 items per request is worth
+     * far more than the one-off read.
+     */
+    transactions: route(web, mobile, "transaction writes"),
+    batch: route(mobile, web, "batched writes"),
     categories: route(mobile, web, "category writes"),
   };
 
@@ -191,33 +207,19 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
         async () => [],
       ),
 
-    // Transaction writes prefer mobile but web can do them, so an expired
-    // mobile token costs nothing here beyond a warning.
     addTransaction: async (input: NewTransaction): Promise<string> =>
-      viaMobile(
-        "adding a transaction",
-        (b) => b.addTransaction(input),
-        web && (() => web.addTransaction(input)),
-      ),
+      writes.transactions.addTransaction(input),
     editTransaction: async (id: string, patch: TransactionPatch): Promise<void> =>
-      viaMobile(
-        "editing a transaction",
-        (b) => b.editTransaction(id, patch),
-        web && (() => web.editTransaction(id, patch)),
-      ),
+      writes.transactions.editTransaction(id, patch),
     deleteTransaction: async (id: string): Promise<void> =>
-      viaMobile(
-        "deleting a transaction",
-        (b) => b.deleteTransaction(id),
-        web && (() => web.deleteTransaction(id)),
-      ),
+      writes.transactions.deleteTransaction(id),
 
     async retagTransactions(plan: RetagEntry[]): Promise<number> {
-      const batched = writes.transactions.retagTransactions;
+      const batched = writes.batch.retagTransactions;
       if (!batched) {
         throw new MoneyLoverError("this backend cannot batch writes");
       }
-      return batched.call(writes.transactions, plan);
+      return batched.call(writes.batch, plan);
     },
 
     // `async` on purpose: these can fail because a capability is missing, and
@@ -284,7 +286,8 @@ export function describeRouting(parts: CompositeParts): Record<string, string> {
     categories: name(mobile, web),
     events: mobile ? "mobile" : "unavailable",
     labels: mobile ? "mobile" : "unavailable",
-    transactionWrites: name(mobile, web),
+    transactionWrites: name(web, mobile),
+    batchedWrites: name(mobile, web),
     categoryWrites: name(mobile, web),
     walletWrites: web ? "web" : "unavailable",
   };

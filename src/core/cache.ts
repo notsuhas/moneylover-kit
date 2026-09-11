@@ -1,10 +1,15 @@
 /**
- * A short-lived read cache.
+ * A short-lived read cache, shared by the client *and* the backends.
  *
- * Not an optimisation for its own sake: a transaction list is thousands of
- * rows and a single CLI command or MCP tool call may need it several times.
- * Writes invalidate rather than wait for expiry, because an edit rebuilt from
- * a stale row would push stale fields back to the server.
+ * Neither API can fetch one transaction: the only reads are "every transaction"
+ * — one big request on web, 45 paginated pulls on mobile. So editing a single
+ * row used to refetch the whole account, which measured 19s on web and 37s on
+ * mobile and blew past a 30s gateway timeout.
+ *
+ * Sharing one cache across both layers is what makes an edit cheap: the search
+ * that found the row has already paid for the list. Writes invalidate rather
+ * than wait for expiry, because an edit rebuilt from a stale row would push
+ * stale fields back.
  */
 
 export interface Cache {
