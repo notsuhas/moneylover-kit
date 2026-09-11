@@ -27,6 +27,8 @@
   ],
   "scripts": {
     "build": "tsc",
+    "changeset": "changeset",
+    "bump": "changeset version",
     "dev": "tsc --watch",
     "mcp": "node dist/mcp/stdio.js",
     "mcp:http": "node dist/mcp/http.js",
@@ -55,6 +57,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
+    "@changesets/cli": "^3.0.2",
     "@types/node": "^22.20.2",
     "fallow": "^3.24.1",
     "prettier": "^3.9.6",

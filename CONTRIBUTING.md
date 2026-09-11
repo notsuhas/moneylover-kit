@@ -71,3 +71,33 @@ credentials removed.
 
 Corrections especially welcome. Several things in those docs were stated
 confidently and turned out to be wrong.
+
+## Releasing
+
+Versions are driven by [changesets](https://github.com/changesets/changesets),
+so the changelog is written when the change is fresh rather than reconstructed
+from git log at release time.
+
+With a change ready, describe it:
+
+```bash
+npm run changeset      # pick patch/minor/major, write one line for users
+```
+
+That drops a markdown file in `.changeset/`; commit it with the change. To cut a
+release from whatever has accumulated:
+
+```bash
+npm run bump           # rolls the changesets into CHANGELOG.md and the version
+npm run verify
+git commit -am "chore: release" && git tag "v$(node -p 'require("./package.json").version')"
+git push --follow-tags
+```
+
+The tag triggers `.github/workflows/release.yml`, which republishes from CI with
+provenance. It needs an `NPM_TOKEN` repository secret; without one, publish by
+hand with `npm publish --access public`.
+
+Write the changeset for someone using the package, not for someone reading the
+diff — "an edit no longer clears the receipt image" rather than "rebuild item
+from row".

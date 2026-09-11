@@ -26,16 +26,15 @@ See [docs/traps.md](docs/traps.md).
 npm install -g moneylover-kit    # or npx moneylover-kit
 ```
 
-Not on npm yet, so until it is, build it from source:
+To run it from source instead, clone and build —
+`npm install -g github:notsuhas/moneylover-kit` does _not_ work, because npm
+skips devDependencies when preparing a git dependency and leaves no compiler to
+build with:
 
 ```bash
 git clone https://github.com/notsuhas/moneylover-kit && cd moneylover-kit
 npm ci && npm run build && npm install -g .
 ```
-
-`npm install -g github:notsuhas/moneylover-kit` does **not** work: npm skips
-devDependencies when preparing a git dependency, so there is no compiler
-available to build with.
 
 Then set your credentials:
 

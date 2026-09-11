@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-09-11
 
 First release.
 
@@ -16,3 +16,6 @@ First release.
   HTTP (`moneylover-mcp-http`).
 - Documented both APIs, including the traps: the category id that hangs for 120
   seconds instead of erroring, the four response shapes, and the device limit.
+- Wallet and category management, off by default behind
+  `MONEYLOVER_MCP_ALLOW_STRUCTURE`, with deleting one gated separately again
+  behind `MONEYLOVER_MCP_ALLOW_DELETE`.
