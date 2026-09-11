@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type BackendName, MoneyLoverError } from "../core/types.js";
@@ -71,6 +71,21 @@ function writeCache(path: string, value: Cached): void {
   chmodSync(path, 0o600);
 }
 
+/** A JWT's claims, or undefined when it is not a readable JWT at all. */
+function claimsOf(jwt: string): { exp?: number } | undefined {
+  try {
+    const body = jwt.split(".")[1];
+    if (!body) return undefined;
+    return JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: number };
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when an `exp` claim is within a minute of now. No claim never expires. */
+const lapsed = (claims: { exp?: number }): boolean =>
+  claims.exp !== undefined && claims.exp - 60 < Date.now() / 1000;
+
 /**
  * True when a token that we *know* is past its expiry.
  *
@@ -80,29 +95,15 @@ function writeCache(path: string, value: Cached): void {
  * JWT, and there `expired` errs the other way.
  */
 function definitelyExpired(jwt: string): boolean {
-  try {
-    const body = jwt.split(".")[1];
-    if (!body) return false;
-    const claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: number };
-    if (!claims.exp) return false;
-    return claims.exp - 60 < Date.now() / 1000;
-  } catch {
-    return false;
-  }
+  const claims = claimsOf(jwt);
+  return claims !== undefined && lapsed(claims);
 }
 
 /** True when the JWT is absent, unparseable, or within a minute of expiry. */
 function expired(jwt: string | undefined): boolean {
   if (!jwt) return true;
-  try {
-    const body = jwt.split(".")[1];
-    if (!body) return true;
-    const claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: number };
-    if (!claims.exp) return false;
-    return claims.exp - 60 < Date.now() / 1000;
-  } catch {
-    return true;
-  }
+  const claims = claimsOf(jwt);
+  return claims === undefined || lapsed(claims);
 }
 
 /**
@@ -155,7 +156,7 @@ export async function webLogin(
  * The mobile API has no equivalent — every shape of `grant_type=refresh_token`
  * answers 500, and each mobile login creates a new device.
  */
-export async function webRefresh(
+async function webRefresh(
   refreshToken: string,
 ): Promise<{ access_token: string; refresh_token?: string }> {
   const payload = await post<unknown>(`${WEB_API}/user/refresh-token`, {
@@ -363,17 +364,6 @@ async function renew(opts: AuthOptions, path: string, supplied?: string): Promis
 
   writeCache(path, { ...grant, email: opts.email as string });
   return grant.access_token;
-}
-
-/** Discard a cached token, so the next call renews. For a rejected token. */
-export function forgetToken(backend: BackendName, email?: string): void {
-  const who = email ?? process.env.MONEYLOVER_EMAIL;
-  if (!who) return;
-  try {
-    rmSync(cachePath(backend, who));
-  } catch {
-    // Nothing cached is the same outcome as having just removed it.
-  }
 }
 
 /** Where a backend's token for this account is cached. Useful in errors and docs. */
