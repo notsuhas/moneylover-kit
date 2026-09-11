@@ -5,11 +5,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type BackendName, MoneyLoverError } from "../core/types.js";
-import { post } from "./http.js";
+import { post, unwrap } from "./http.js";
 
 const WEB_API = "https://web.moneylover.me/api";
 const OAUTH = "https://oauth.moneylover.me";
@@ -71,6 +71,26 @@ function writeCache(path: string, value: Cached): void {
   chmodSync(path, 0o600);
 }
 
+/**
+ * True when a token that we *know* is past its expiry.
+ *
+ * Unparseable is not expired: a caller may hand over an opaque token, and
+ * refusing it because it is not a readable JWT would reject something that
+ * works. Only used for supplied tokens — a cached one we minted is always a
+ * JWT, and there `expired` errs the other way.
+ */
+function definitelyExpired(jwt: string): boolean {
+  try {
+    const body = jwt.split(".")[1];
+    if (!body) return false;
+    const claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: number };
+    if (!claims.exp) return false;
+    return claims.exp - 60 < Date.now() / 1000;
+  } catch {
+    return false;
+  }
+}
+
 /** True when the JWT is absent, unparseable, or within a minute of expiry. */
 function expired(jwt: string | undefined): boolean {
   if (!jwt) return true;
@@ -93,7 +113,10 @@ function expired(jwt: string | undefined): boolean {
  * endpoint — plain `/token`, form-encoded, with the client id from the login
  * URL — and it has no captcha at all.
  */
-export async function webLogin(email: string, password: string): Promise<string> {
+export async function webLogin(
+  email: string,
+  password: string,
+): Promise<{ access_token: string; refresh_token?: string }> {
   const init = await post<{ data?: { request_token?: string; login_url?: string } }>(
     `${WEB_API}/user/login-url`,
   );
@@ -105,14 +128,46 @@ export async function webLogin(email: string, password: string): Promise<string>
   const client = new URL(loginUrl).searchParams.get("client");
   if (!client) throw new MoneyLoverError(`login_url has no client parameter: ${loginUrl}`);
 
-  const grant = await post<{ access_token?: string; message?: string }>(`${OAUTH}/token`, {
+  const grant = await post<{
+    access_token?: string;
+    refresh_token?: string;
+    message?: string;
+  }>(`${OAUTH}/token`, {
     headers: { authorization: `Bearer ${requestToken}`, client },
     form: { email, password },
   });
   if (!grant?.access_token) {
     throw new MoneyLoverError(grant?.message ?? "web login failed", undefined, grant);
   }
-  return grant.access_token;
+  // The refresh token is the whole point: it renews the access token without
+  // registering another device. Losing it means logging in again every week.
+  return { access_token: grant.access_token, refresh_token: grant.refresh_token };
+}
+
+/**
+ * Renew a web access token from its refresh token.
+ *
+ * This is the only renewal path either API offers that costs nothing: verified
+ * against a live account, the new token carries the **same** `tokenDevice`, so
+ * no device slot is consumed, and the response rotates the refresh token so the
+ * chain continues indefinitely. No Authorization header and no client secret.
+ *
+ * The mobile API has no equivalent — every shape of `grant_type=refresh_token`
+ * answers 500, and each mobile login creates a new device.
+ */
+export async function webRefresh(
+  refreshToken: string,
+): Promise<{ access_token: string; refresh_token?: string }> {
+  const payload = await post<unknown>(`${WEB_API}/user/refresh-token`, {
+    body: { refreshToken },
+  });
+  const grant = unwrap<{ status?: boolean; access_token?: string; refresh_token?: string }>(
+    payload,
+  );
+  if (!grant?.access_token) {
+    throw new MoneyLoverError("web token refresh failed", undefined, grant);
+  }
+  return { access_token: grant.access_token, refresh_token: grant.refresh_token };
 }
 
 /**
@@ -204,11 +259,47 @@ function fromEnv(options: AuthOptions): AuthOptions {
  * is cached on disk and reused until it expires. Logging in per process, per
  * container start, or per tool call would exhaust the slots for no reason.
  */
+/** Refreshes in flight, so concurrent callers share one renewal. */
+const renewals = new Map<string, Promise<string>>();
+
+/**
+ * Get a usable access token, renewing it without human involvement.
+ *
+ * ## The device budget is why this is careful
+ *
+ * An account allows a fixed number of devices to hold a token — five, reported
+ * as `limitDevice` — and **every login registers another**. Once they are used
+ * up Money Lover refuses further logins until you sign out somewhere. A server
+ * that logged in weekly would exhaust the account in about a month; verified
+ * against a live account, a repeat login creates a new `tokenDevice` even when
+ * the same `did` is sent, so there is no way to pin a slot.
+ *
+ * So renewal is ordered by what it costs:
+ *
+ *   1. an explicit token, if it has not expired — a *seed*, not an override,
+ *      or a stale one could never be recovered from
+ *   2. the cached token, if it has not expired
+ *   3. **web only:** refresh. Costs nothing: the renewed token carries the same
+ *      `tokenDevice`, and the refresh token rotates so this continues forever
+ *   4. a login, which spends a device slot. The mobile API has no refresh, so
+ *      this is its only path — which is why a mobile token expiring should
+ *      degrade to web rather than silently log in again.
+ */
 export async function accessToken(options: AuthOptions): Promise<string> {
   const opts = fromEnv(options);
-  if (opts.token) return opts.token;
+  const supplied = opts.token;
+
+  // A supplied token is a seed: honoured unless demonstrably stale, so an
+  // opaque token still works and an expired one can still be recovered from.
+  if (supplied && !definitelyExpired(supplied)) return supplied;
 
   if (!opts.email || !opts.password) {
+    if (supplied) {
+      throw new MoneyLoverError(
+        "The supplied token has expired and there are no credentials to renew it.\n" +
+          "Set MONEYLOVER_EMAIL and MONEYLOVER_PASSWORD so it can renew itself.",
+      );
+    }
     throw new MoneyLoverError(
       "No credentials. Set MONEYLOVER_EMAIL and MONEYLOVER_PASSWORD, or pass\n" +
         "MONEYLOVER_ACCESS_TOKEN to skip logging in entirely.",
@@ -216,30 +307,73 @@ export async function accessToken(options: AuthOptions): Promise<string> {
   }
 
   const path = cachePath(opts.backend, opts.email);
-  if (!opts.force) {
-    const hit = readCache(path);
-    if (hit && !expired(hit.access_token)) return hit.access_token;
-    if (hit && opts.noLogin) {
-      throw new MoneyLoverError(
-        `Cached ${opts.backend} token has expired. Run \`moneylover login\` to mint a new one.\n` +
-          "That registers a device, and an account allows only a few at once.",
-      );
+  const inFlight = renewals.get(path);
+  if (inFlight) return inFlight;
+
+  const renewal = renew(opts, path, supplied).finally(() => renewals.delete(path));
+  renewals.set(path, renewal);
+  return renewal;
+}
+
+async function renew(opts: AuthOptions, path: string, supplied?: string): Promise<string> {
+  const cached = readCache(path);
+
+  if (!opts.force && cached && !expired(cached.access_token)) return cached.access_token;
+
+  // Seed the cache from a supplied token's refresh token if that is all we have.
+  const refreshToken = cached?.refresh_token;
+
+  if (!opts.force && opts.backend === "web" && refreshToken) {
+    try {
+      const grant = await webRefresh(refreshToken);
+      writeCache(path, { ...grant, email: opts.email as string });
+      return grant.access_token;
+    } catch {
+      // Refresh tokens can be revoked. Fall through to a login rather than
+      // failing: that costs a device slot, but it is recoverable and a hard
+      // failure is not.
     }
   }
+
   if (opts.noLogin) {
     throw new MoneyLoverError(
-      `No cached ${opts.backend} token. Run \`moneylover login\` first.\n` +
-        "That registers a device, and an account allows only a few at once.",
+      `Cannot renew the ${opts.backend} token without logging in, and that is disabled.\n` +
+        (opts.backend === "mobile"
+          ? "The mobile API has no refresh endpoint, so a login is the only option and it\n" +
+            "spends one of the account's device slots. Run `moneylover login --backend mobile`."
+          : "Run `moneylover login`."),
+    );
+  }
+
+  if (opts.backend === "mobile" && supplied) {
+    // Being explicit: the caller handed us a mobile token, it has expired, and
+    // renewing it means a new device. Callers that can degrade should.
+    throw new MoneyLoverError(
+      "The mobile token has expired. The mobile API has no refresh endpoint, so\n" +
+        "renewing it means a login, and every mobile login registers another device\n" +
+        "against a limit of five. Refresh MONEYLOVER_MOBILE_TOKEN, or drop it and let\n" +
+        "this log in once and cache the result.",
     );
   }
 
   const grant =
     opts.backend === "mobile"
-      ? await mobileLogin(opts.email, opts.password)
-      : { access_token: await webLogin(opts.email, opts.password) };
+      ? await mobileLogin(opts.email as string, opts.password as string)
+      : await webLogin(opts.email as string, opts.password as string);
 
-  writeCache(path, { ...grant, email: opts.email });
+  writeCache(path, { ...grant, email: opts.email as string });
   return grant.access_token;
+}
+
+/** Discard a cached token, so the next call renews. For a rejected token. */
+export function forgetToken(backend: BackendName, email?: string): void {
+  const who = email ?? process.env.MONEYLOVER_EMAIL;
+  if (!who) return;
+  try {
+    rmSync(cachePath(backend, who));
+  } catch {
+    // Nothing cached is the same outcome as having just removed it.
+  }
 }
 
 /** Where a backend's token for this account is cached. Useful in errors and docs. */

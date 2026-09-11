@@ -52,6 +52,17 @@ export interface CompositeParts {
   mobile?: Backend;
 }
 
+/**
+ * Errors that mean "this API is not usable right now" rather than "this call
+ * was wrong": an expired token with no way to renew it, or a token the server
+ * rejected because its device is gone.
+ */
+function isAuthFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = (error as { code?: number | string })?.code;
+  return code === 706 || code === 717 || /token|expired|device|not authorized|oauth/i.test(message);
+}
+
 /** Which backend each capability needs, for the error message when it is absent. */
 const OWNER: Record<keyof Capabilities, "web" | "mobile"> = {
   balances: "web",
@@ -115,6 +126,43 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
     categories: route(mobile, web, "category writes"),
   };
 
+  /**
+   * Mobile's token cannot be refreshed — the API has no such endpoint, and a
+   * login would spend one of the account's five device slots. So when it stops
+   * working, mobile is dropped for the rest of the process and the web API
+   * takes over whatever it can. Transactions keep working; events, labels and
+   * nesting go quiet until someone renews the mobile token.
+   */
+  let mobileDown: string | undefined;
+
+  async function viaMobile<T>(
+    operation: string,
+    run: (backend: Backend) => Promise<T>,
+    fallback: (() => Promise<T>) | undefined,
+  ): Promise<T> {
+    if (!mobile || mobileDown) {
+      if (fallback) return fallback();
+      throw new MoneyLoverError(
+        mobileDown
+          ? `${operation} needs the mobile API, which stopped working: ${mobileDown}`
+          : `${operation} needs the mobile API, which is not configured.`,
+      );
+    }
+    try {
+      return await run(mobile);
+    } catch (error) {
+      if (!isAuthFailure(error)) throw error;
+      mobileDown = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      console.error(
+        `[moneylover] mobile API unavailable, continuing on web: ${mobileDown}\n` +
+          "[moneylover] events, labels and nested categories are unavailable until " +
+          "its token is renewed.",
+      );
+      if (fallback) return fallback();
+      throw error;
+    }
+  }
+
   const backend: Backend = {
     name: (mobile ? "mobile" : "web") as Backend["name"],
     can,
@@ -122,26 +170,47 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
     account: async (): Promise<Account> => reads.account.account(),
     wallets: async (): Promise<Wallet[]> => reads.wallets.wallets(),
     transactions: async (): Promise<Transaction[]> => reads.transactions.transactions(),
-    categories: async (): Promise<Category[]> => reads.categories.categories(),
+    categories: async (): Promise<Category[]> =>
+      reads.categories === mobile
+        ? viaMobile("categories", (b) => b.categories(), web && (() => web.categories()))
+        : reads.categories.categories(),
 
-    async events(): Promise<Event[]> {
-      const source = mobile?.events;
-      // Not an error: an account can simply have none, and the web API has no
-      // route at all. An empty list is the honest answer either way.
-      return source && mobile ? source.call(mobile) : [];
-    },
+    // An empty list rather than an error: the web API has no route for these
+    // at all, and an account can genuinely have none.
+    events: async (): Promise<Event[]> =>
+      viaMobile(
+        "events",
+        (b) => b.events?.() ?? Promise.resolve([]),
+        async () => [],
+      ),
 
-    async labels(): Promise<Label[]> {
-      const source = mobile?.labels;
-      return source && mobile ? source.call(mobile) : [];
-    },
+    labels: async (): Promise<Label[]> =>
+      viaMobile(
+        "labels",
+        (b) => b.labels?.() ?? Promise.resolve([]),
+        async () => [],
+      ),
 
+    // Transaction writes prefer mobile but web can do them, so an expired
+    // mobile token costs nothing here beyond a warning.
     addTransaction: async (input: NewTransaction): Promise<string> =>
-      writes.transactions.addTransaction(input),
+      viaMobile(
+        "adding a transaction",
+        (b) => b.addTransaction(input),
+        web && (() => web.addTransaction(input)),
+      ),
     editTransaction: async (id: string, patch: TransactionPatch): Promise<void> =>
-      writes.transactions.editTransaction(id, patch),
+      viaMobile(
+        "editing a transaction",
+        (b) => b.editTransaction(id, patch),
+        web && (() => web.editTransaction(id, patch)),
+      ),
     deleteTransaction: async (id: string): Promise<void> =>
-      writes.transactions.deleteTransaction(id),
+      viaMobile(
+        "deleting a transaction",
+        (b) => b.deleteTransaction(id),
+        web && (() => web.deleteTransaction(id)),
+      ),
 
     async retagTransactions(plan: RetagEntry[]): Promise<number> {
       const batched = writes.transactions.retagTransactions;

@@ -29,6 +29,38 @@ returns `e:717` — **reads included**. Nothing about the token looks wrong. If
 everything suddenly 717s, this device is no longer on the account; log in again
 to register a new one.
 
+### Only the web token can be renewed, and only the web token is free
+
+The web API renews an access token from its refresh token:
+
+```
+POST web.moneylover.me/api/user/refresh-token   {refreshToken}
+  -> {access_token, refresh_token}    no Authorization header, no client secret
+```
+
+Verified against a live account, the renewed token carries the **same**
+`tokenDevice` — so no device slot is consumed — and the refresh token rotates,
+so the chain continues indefinitely. That makes a web-backed service
+self-maintaining.
+
+The mobile API has nothing equivalent. `grant_type=refresh_token` answers
+`InternalServerError` in every shape tried (JSON and form, with and without
+Basic auth, against `/token` and `/refresh-token`), and the web refresh
+endpoint rejects a mobile-issued refresh token with
+`OauthErrorClientSecretNotValidate`. So a mobile token can only be replaced by
+logging in.
+
+### A fixed `did` does not pin a device
+
+Worth stating because it looks like it should. The mobile login accepts a `did`
+and `na`, but the server issues its own `tokenDevice` UUID regardless: two
+logins one minute apart with an identical `did` produced
+`650bb6fe…` and `a53c0f9b…`. Every login is a new device, so a service that
+logs in weekly exhausts a five-device account in about a month.
+
+Logins are also rate-limited — a second one seconds later answered
+`TooManyRequests` — so retrying on failure makes things worse, not better.
+
 ### Password login is scriptable, on both APIs
 
 Widely believed otherwise, including by an earlier version of this document.

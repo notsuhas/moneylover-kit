@@ -72,7 +72,7 @@ describe("tokenLocation", () => {
 describe("webLogin", () => {
   it("takes the client id out of the login URL and posts the credentials", async () => {
     const seen = stubFetch(WEB_ROUTES);
-    assert.equal(await webLogin("a@b.c", "pw"), "web-token");
+    assert.equal((await webLogin("a@b.c", "pw")).access_token, "web-token");
     assert.ok(seen.some((u) => u.includes("/user/login-url")));
     assert.ok(seen.some((u) => u.includes("oauth.moneylover.me/token")));
   });
@@ -236,5 +236,139 @@ describe("token cache permissions", () => {
     stubFetch({ ...WEB_ROUTES, "oauth.moneylover.me/token": { access_token: jwt(7200) } });
     await accessToken({ backend: "web", force: true });
     assert.equal(statSync(path).mode & 0o777, 0o600);
+  });
+});
+
+describe("renewal — web refreshes instead of logging in", () => {
+  /**
+   * The whole point: an expired web token renews from its refresh token, which
+   * reuses the device slot. A login would take another, and an account only
+   * allows five.
+   */
+  it("refreshes an expired cached token without logging in", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+
+    // Seed the cache with an expired access token and a refresh token.
+    stubFetch({
+      ...WEB_ROUTES,
+      "oauth.moneylover.me/token": { access_token: jwt(-10), refresh_token: "rt-1" },
+    });
+    await accessToken({ backend: "web" });
+
+    const renewed = jwt(3600);
+    let logins = 0;
+    let refreshes = 0;
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/user/refresh-token")) {
+        refreshes += 1;
+        return json({ error: 0, data: { access_token: renewed, refresh_token: "rt-2" } });
+      }
+      if (url.includes("oauth.moneylover.me/token")) logins += 1;
+      return json({ data: { request_token: "rt", login_url: "https://o.test/auth?client=C" } });
+    }) as typeof fetch;
+
+    assert.equal(await accessToken({ backend: "web" }), renewed);
+    assert.equal(refreshes, 1, "must refresh");
+    assert.equal(logins, 0, "must not log in — that spends a device slot");
+  });
+
+  it("persists the rotated refresh token, so the chain continues", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    stubFetch({
+      ...WEB_ROUTES,
+      "oauth.moneylover.me/token": { access_token: jwt(-10), refresh_token: "rt-1" },
+    });
+    await accessToken({ backend: "web" });
+
+    stubFetch({
+      "/user/refresh-token": { error: 0, data: { access_token: jwt(3600), refresh_token: "rt-2" } },
+    });
+    await accessToken({ backend: "web" });
+    const cached = JSON.parse(readFileSync(tokenLocation("web", "a@b.c"), "utf8"));
+    assert.equal(cached.refresh_token, "rt-2");
+  });
+
+  it("falls back to a login when the refresh token is rejected", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    stubFetch({
+      ...WEB_ROUTES,
+      "oauth.moneylover.me/token": { access_token: jwt(-10), refresh_token: "dead" },
+    });
+    await accessToken({ backend: "web" });
+
+    const fresh = jwt(3600);
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/user/refresh-token")) return json({ error: 1, msg: "revoked" });
+      if (url.includes("/user/login-url")) {
+        return json({ data: { request_token: "rt", login_url: "https://o.test/auth?client=C" } });
+      }
+      return json({ access_token: fresh, refresh_token: "rt-new" });
+    }) as typeof fetch;
+    assert.equal(await accessToken({ backend: "web" }), fresh);
+  });
+
+  it("shares one renewal between concurrent callers", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    stubFetch({
+      ...WEB_ROUTES,
+      "oauth.moneylover.me/token": { access_token: jwt(-10), refresh_token: "rt-1" },
+    });
+    await accessToken({ backend: "web" });
+
+    let refreshes = 0;
+    globalThis.fetch = (async (input: string | URL) => {
+      if (String(input).includes("/user/refresh-token")) {
+        refreshes += 1;
+        await new Promise((r) => setTimeout(r, 10));
+        return json({ error: 0, data: { access_token: jwt(3600), refresh_token: "rt-2" } });
+      }
+      return json({});
+    }) as typeof fetch;
+
+    await Promise.all([accessToken({ backend: "web" }), accessToken({ backend: "web" })]);
+    assert.equal(refreshes, 1);
+  });
+});
+
+describe("renewal — supplied tokens", () => {
+  it("uses an opaque token rather than refusing what it cannot parse", async () => {
+    globalThis.fetch = (() => {
+      throw new Error("should not be called");
+    }) as typeof fetch;
+    assert.equal(await accessToken({ backend: "web", token: "opaque-token" }), "opaque-token");
+  });
+
+  /** A supplied token is a seed; an expired one must be recoverable. */
+  it("renews past an expired supplied token instead of using it", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    const fresh = jwt(3600);
+    stubFetch({ ...WEB_ROUTES, "oauth.moneylover.me/token": { access_token: fresh } });
+    assert.equal(await accessToken({ backend: "web", token: jwt(-10) }), fresh);
+  });
+
+  it("explains itself when an expired token has no credentials behind it", async () => {
+    await assert.rejects(
+      () => accessToken({ backend: "web", token: jwt(-10) }),
+      /no credentials to renew it/,
+    );
+  });
+
+  /** Mobile has no refresh, so renewing means a new device. Say so. */
+  it("refuses to silently re-login a mobile token, and names the cost", async () => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    process.env.MONEYLOVER_MOBILE_CLIENT = "id";
+    process.env.MONEYLOVER_MOBILE_SECRET = "secret";
+    await assert.rejects(
+      () => accessToken({ backend: "mobile", token: jwt(-10) }),
+      /registers another device/,
+    );
   });
 });

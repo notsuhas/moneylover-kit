@@ -211,3 +211,81 @@ describe("describeRouting", () => {
     assert.equal(routing.transactionWrites, "web");
   });
 });
+
+describe("createCompositeBackend — mobile failing over to web", () => {
+  /** A mobile token cannot be refreshed, so failure has to degrade, not error. */
+  function failingMobile() {
+    const mobile = spy("mobile", MOBILE_CAN);
+    const broken: Backend = {
+      ...mobile.backend,
+      categories: async () => {
+        throw new Error("e:717 token_device_not_found");
+      },
+      addTransaction: async () => {
+        throw new Error("e:717 token_device_not_found");
+      },
+      events: async () => {
+        throw new Error("e:717 token_device_not_found");
+      },
+      labels: async () => {
+        throw new Error("e:717 token_device_not_found");
+      },
+    };
+    const web = spy("web", WEB_CAN);
+    return { web, composite: createCompositeBackend({ web: web.backend, mobile: broken }) };
+  }
+
+  const quiet = async <T>(run: () => Promise<T>): Promise<T> => {
+    const real = console.error;
+    console.error = () => {};
+    try {
+      return await run();
+    } finally {
+      console.error = real;
+    }
+  };
+
+  it("serves categories from web when mobile's token is rejected", async () => {
+    const { web, composite } = failingMobile();
+    await quiet(() => composite.categories());
+    assert.deepEqual(web.calls, ["categories"]);
+  });
+
+  it("keeps transaction writes working on web", async () => {
+    const { web, composite } = failingMobile();
+    await quiet(() => composite.addTransaction({ wallet: "w", category: "c", amount: -1 }));
+    assert.deepEqual(web.calls, ["addTransaction"]);
+  });
+
+  /** Web has no route for these at all, so empty is the honest answer. */
+  it("returns empty for events and labels rather than throwing", async () => {
+    const { composite } = failingMobile();
+    assert.deepEqual(await quiet(() => composite.events?.() ?? Promise.resolve([])), []);
+    assert.deepEqual(await quiet(() => composite.labels?.() ?? Promise.resolve([])), []);
+  });
+
+  it("stops retrying mobile once it is known bad", async () => {
+    const { web, composite } = failingMobile();
+    await quiet(() => composite.categories());
+    await quiet(() => composite.categories());
+    assert.deepEqual(web.calls, ["categories", "categories"]);
+  });
+
+  /** A real bug must not be mistaken for an expired token. */
+  it("does not swallow a non-auth error", async () => {
+    const mobile = spy("mobile", MOBILE_CAN);
+    const broken: Backend = {
+      ...mobile.backend,
+      addTransaction: async () => {
+        throw new Error("amount cannot be zero");
+      },
+    };
+    const web = spy("web", WEB_CAN);
+    const composite = createCompositeBackend({ web: web.backend, mobile: broken });
+    await assert.rejects(
+      () => composite.addTransaction({ wallet: "w", category: "c", amount: 0 }),
+      /amount cannot be zero/,
+    );
+    assert.deepEqual(web.calls, [], "must not retry a genuine error on the other API");
+  });
+});
