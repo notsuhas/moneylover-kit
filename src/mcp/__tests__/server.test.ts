@@ -49,6 +49,7 @@ describe("createMcpServer", () => {
   ];
   const STRUCTURE = [
     "add_category",
+    "add_event",
     "add_wallet",
     "edit_category",
     "edit_wallet",

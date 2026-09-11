@@ -113,6 +113,19 @@ export interface TransactionQuery {
 export interface Event {
   id: string;
   name: string;
+  icon?: string;
+  /** YYYY-MM-DD. */
+  endDate?: string;
+  currencyId?: number;
+}
+
+export interface NewEvent {
+  name: string;
+  /** YYYY-MM-DD. Money Lover events have an end date but no start date. */
+  endDate: string;
+  /** Money Lover's numeric currency id — 11 is INR. */
+  currencyId: number;
+  icon?: string;
 }
 
 export interface NewWallet {
@@ -192,6 +205,7 @@ export interface Backend {
   transactions(): Promise<Transaction[]>;
   /** Events / trips. Present only where `can.events` says so. */
   events?(): Promise<Event[]>;
+  addEvent?(input: NewEvent): Promise<string>;
   /** Global, nestable category records. Mobile only — the web API has no equivalent. */
   labels?(): Promise<Label[]>;
   addTransaction(input: NewTransaction): Promise<string>;

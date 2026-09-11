@@ -17,6 +17,24 @@ export const structureAllowed = (): boolean => process.env.MONEYLOVER_MCP_ALLOW_
 
 export function registerStructureTools(server: McpServer, client: MoneyLover): void {
   server.registerTool(
+    "add_event",
+    {
+      title: "Create an event",
+      description: "Create a trip/event with an end date. Money Lover does not store a start date.",
+      inputSchema: {
+        name: z.string().min(1),
+        endDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .describe("YYYY-MM-DD"),
+        currencyId: z.number().int().describe("Money Lover's numeric currency id"),
+        icon: z.string().optional(),
+      },
+    },
+    async (args) => json({ created: await client.addEvent(args) }),
+  );
+
+  server.registerTool(
     "list_currencies_hint",
     {
       title: "How to name a currency",

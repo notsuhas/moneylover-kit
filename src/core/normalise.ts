@@ -89,7 +89,16 @@ export function normaliseTransaction(t: WireTransaction): Transaction {
   };
 }
 
-export const normaliseEvent = (e: { _id: string; name: string }): Event => ({
+export const normaliseEvent = (e: {
+  _id: string;
+  name: string;
+  icon?: string;
+  end_date?: string;
+  currency_id?: number;
+}): Event => ({
   id: e._id,
   name: e.name,
+  ...(e.icon ? { icon: e.icon } : {}),
+  ...(e.end_date ? { endDate: day(e.end_date) } : {}),
+  ...(e.currency_id !== undefined ? { currencyId: e.currency_id } : {}),
 });

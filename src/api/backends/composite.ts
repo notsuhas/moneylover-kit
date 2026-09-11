@@ -39,6 +39,7 @@ import type {
   Event,
   Label,
   NewCategory,
+  NewEvent,
   NewTransaction,
   NewWallet,
   RetagEntry,
@@ -253,6 +254,12 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
       return add.call(target, input);
     },
 
+    async addEvent(input: NewEvent): Promise<string> {
+      const target = require(mobile, "events");
+      if (!target.addEvent) throw new MoneyLoverError("no backend available for event writes");
+      return target.addEvent(input);
+    },
+
     async editCategory(id: string, patch: CategoryPatch): Promise<void> {
       const edit = writes.categories.editCategory;
       if (!edit) throw new MoneyLoverError("no backend available for category writes");
@@ -285,6 +292,7 @@ export function describeRouting(parts: CompositeParts): Record<string, string> {
     transactions: name(web, mobile),
     categories: name(mobile, web),
     events: mobile ? "mobile" : "unavailable",
+    eventWrites: mobile ? "mobile" : "unavailable",
     labels: mobile ? "mobile" : "unavailable",
     transactionWrites: name(web, mobile),
     batchedWrites: name(mobile, web),

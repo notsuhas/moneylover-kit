@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+### Patch Changes
+
+- Add event creation to the TypeScript client and opt-in MCP structure tools.
+
 ## 0.1.0 — 2026-09-11
 
 First release.

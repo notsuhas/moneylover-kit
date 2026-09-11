@@ -23,6 +23,7 @@ behind two flags rather than one, because the risk is not evenly spread.
 | `list_currencies_hint` | the numeric currency ids in use, for `add_wallet` |
 | `add_wallet` · `edit_wallet` | create a wallet, or change its name, icon or currency |
 | `add_category` · `edit_category` | create a category, including all-wallet and nested ones, or rename it |
+| `add_event` | create a trip/event with an end date |
 
 `MONEYLOVER_MCP_ALLOW_DELETE=1` adds the two that cannot be undone:
 

@@ -104,7 +104,7 @@ Two transports. Both expose the same eight tools: `list_wallets`,
 `list_categories`, `search_transactions`, `add_transaction`, `edit_transaction`,
 `delete_transaction`, `record_lending`, `lending_summary`.
 
-Managing wallets and categories is opt-in, behind two flags:
+Managing wallets, categories and events is opt-in, behind two flags:
 `MONEYLOVER_MCP_ALLOW_STRUCTURE=1` for creating and editing them, and
 `MONEYLOVER_MCP_ALLOW_DELETE=1` for `delete_wallet` and `delete_category`. A
 rename can be typed back; deleting a wallet takes every transaction in it and
@@ -246,16 +246,16 @@ Set `MONEYLOVER_ACCESS_TOKEN` to supply a token directly and never log in.
 
 ## Environment
 
-|                                                         |                                |
-| ------------------------------------------------------- | ------------------------------ |
-| `MONEYLOVER_EMAIL` · `MONEYLOVER_PASSWORD`              | credentials                    |
-| `MONEYLOVER_ACCESS_TOKEN`                               | use this token, never log in   |
-| `MONEYLOVER_BACKEND`                                    | `web` (default) or `mobile`    |
-| `MONEYLOVER_MOBILE_CLIENT` · `MONEYLOVER_MOBILE_SECRET` | required by the mobile backend |
-| `MONEYLOVER_CONFIG_DIR`                                 | where the token cache lives    |
-| `MCP_TOKEN` · `MCP_PORT` · `MCP_HOST`                   | HTTP MCP transport             |
-| `MONEYLOVER_MCP_ALLOW_STRUCTURE`                        | MCP: wallet/category writes    |
-| `MONEYLOVER_MCP_ALLOW_DELETE`                           | MCP: wallet/category deletes   |
+|                                                         |                                   |
+| ------------------------------------------------------- | --------------------------------- |
+| `MONEYLOVER_EMAIL` · `MONEYLOVER_PASSWORD`              | credentials                       |
+| `MONEYLOVER_ACCESS_TOKEN`                               | use this token, never log in      |
+| `MONEYLOVER_BACKEND`                                    | `web` (default) or `mobile`       |
+| `MONEYLOVER_MOBILE_CLIENT` · `MONEYLOVER_MOBILE_SECRET` | required by the mobile backend    |
+| `MONEYLOVER_CONFIG_DIR`                                 | where the token cache lives       |
+| `MCP_TOKEN` · `MCP_PORT` · `MCP_HOST`                   | HTTP MCP transport                |
+| `MONEYLOVER_MCP_ALLOW_STRUCTURE`                        | MCP: wallet/category/event writes |
+| `MONEYLOVER_MCP_ALLOW_DELETE`                           | MCP: wallet/category deletes      |
 
 ## Docs
 

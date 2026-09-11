@@ -26,6 +26,10 @@ function api(can: Capabilities = ALL) {
       calls.push("addCategory");
       return "new-id";
     },
+    addEvent: async () => {
+      calls.push("addEvent");
+      return "event-id";
+    },
     editCategory: async () => void calls.push("editCategory"),
     deleteCategory: async () => void calls.push("deleteCategory"),
   } as unknown as Backend;

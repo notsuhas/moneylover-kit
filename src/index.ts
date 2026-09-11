@@ -47,6 +47,7 @@ export {
   type Event,
   type Label,
   MoneyLoverError,
+  type NewEvent,
   type NewTransaction,
   type RetagEntry,
   type Transaction,

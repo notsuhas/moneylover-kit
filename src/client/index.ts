@@ -27,6 +27,7 @@ import type {
   Event,
   Label,
   NewCategory,
+  NewEvent,
   NewTransaction,
   NewWallet,
   RetagEntry,
@@ -75,6 +76,7 @@ export interface MoneyLover {
   wallets(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
   events(): Promise<Event[]>;
+  addEvent(input: NewEvent): Promise<Event>;
   /** Global, nestable category records. Empty where the backend has no such layer. */
   labels(): Promise<Label[]>;
 
@@ -162,6 +164,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
   const wallets = () => cache.read("wallets", () => backend.wallets());
   const categories = () => cache.read("categories", () => backend.categories());
   const allTransactions = () => cache.read("transactions", () => backend.transactions());
+  const events = () => cache.read("events", () => backend.events?.() ?? Promise.resolve([]));
 
   /** A transaction write invalidates the normalised view and both raw lists. */
   const forgetTransactions = () =>
@@ -196,7 +199,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     account: () => cache.read("account", () => backend.account()),
     wallets,
     categories,
-    events: () => cache.read("events", () => backend.events?.() ?? Promise.resolve([])),
+    events,
     labels: () => cache.read("labels", () => backend.labels?.() ?? Promise.resolve([])),
     ...structure,
 

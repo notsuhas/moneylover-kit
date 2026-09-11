@@ -14,7 +14,9 @@ import type {
   Capabilities,
   Category,
   CategoryPatch,
+  Event,
   NewCategory,
+  NewEvent,
   NewWallet,
   Wallet,
   WalletPatch,
@@ -49,6 +51,7 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
       "wallets",
       "categories",
       "labels",
+      "events",
       "transactions",
       "web:transactions",
       "web:categories",
@@ -104,6 +107,18 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
         type: input.type,
         icon: input.icon ?? "",
         ...(input.wallet ? { walletId: input.wallet } : {}),
+      };
+    },
+
+    async addEvent(input: NewEvent): Promise<Event> {
+      const id = await need(backend.addEvent, "events")(input);
+      invalidate();
+      return {
+        id,
+        name: input.name,
+        icon: input.icon ?? "icon_5",
+        endDate: input.endDate,
+        currencyId: input.currencyId,
       };
     },
 

@@ -32,6 +32,7 @@ import {
 } from "../../../core/types.js";
 import type { AuthOptions } from "../../auth.js";
 import { unwrap } from "../../http.js";
+import { createEvents } from "./events.js";
 import { createStructure } from "./structure.js";
 import { createSync } from "./sync.js";
 import { itemFrom, type PushItem, type RawTransaction } from "./transactions.js";
@@ -139,9 +140,15 @@ export function createMobileBackend(
     },
 
     async events(): Promise<Event[]> {
-      return (await pull<{ _id: string; name: string }>("/api/sync/pull/campaign/v2")).map(
-        normaliseEvent,
-      );
+      return (
+        await pull<{
+          _id: string;
+          name: string;
+          icon?: string;
+          end_date?: string;
+          currency_id?: number;
+        }>("/api/sync/pull/campaign/v2")
+      ).map(normaliseEvent);
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {
@@ -222,6 +229,10 @@ export function createMobileBackend(
       wallets: () => backend.wallets(),
       categories: () => backend.categories(),
       labels: () => backend.labels?.() ?? Promise.resolve([]),
+    }),
+    ...createEvents({
+      push,
+      events: () => backend.events?.() ?? Promise.resolve([]),
     }),
   };
 

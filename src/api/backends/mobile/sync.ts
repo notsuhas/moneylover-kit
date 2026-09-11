@@ -13,7 +13,7 @@ const API = "https://revoapi.moneylover.me";
 const PAGE = 250;
 const BATCH = 50;
 
-export type PushKind = "transaction" | "category" | "label";
+export type PushKind = "transaction" | "category" | "label" | "campaign";
 
 export interface Sync {
   call<T>(path: string, body?: unknown): Promise<T>;
@@ -64,7 +64,10 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
    * this fails safe. Anything rejected is raised rather than swallowed.
    */
   async function push(kind: PushKind, items: unknown[]): Promise<number> {
-    const path = kind === "label" ? "/api/sync/push/label" : `/api/sync/push/${kind}/v2`;
+    const path =
+      kind === "label" || kind === "campaign"
+        ? `/api/sync/push/${kind}`
+        : `/api/sync/push/${kind}/v2`;
     const failed: unknown[] = [];
     for (let i = 0; i < items.length; i += BATCH) {
       const res = await call<{ status?: boolean; failedItems?: unknown[] }>(path, {
