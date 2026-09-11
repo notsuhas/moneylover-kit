@@ -94,9 +94,14 @@ git commit -am "chore: release" && git tag "v$(node -p 'require("./package.json"
 git push --follow-tags
 ```
 
-The tag triggers `.github/workflows/release.yml`, which republishes from CI with
-provenance. It needs an `NPM_TOKEN` repository secret; without one, publish by
-hand with `npm publish --access public`.
+The tag triggers `.github/workflows/release.yml`, which publishes from CI with
+provenance. It carries no npm token: npm authenticates the workflow by its OIDC
+identity, which has to be registered once as a trusted publisher under the
+package's settings on npmjs.com.
+
+Publishing by hand works too, but needs npm 11 or newer — npm no longer issues
+TOTP secrets, so 2FA is a passkey, and only npm 11 knows how to hand a publish
+off to the browser for it. Older npm just asks for a code that no longer exists.
 
 Write the changeset for someone using the package, not for someone reading the
 diff — "an edit no longer clears the receipt image" rather than "rebuild item
