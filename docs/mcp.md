@@ -97,6 +97,28 @@ The transport is stateless — a fresh server per request, no session table — 
 it restarts cleanly and sits behind a proxy or load balancer without
 coordination.
 
+### In Docker
+
+`Dockerfile` and `compose.yaml` in the repo root run exactly this. The image
+installs the published package, so it carries no compiler, no git and no source
+tree, and it runs as `node` rather than root.
+
+```bash
+cp .env.example .env      # MONEYLOVER_EMAIL, MONEYLOVER_PASSWORD, MCP_TOKEN
+docker compose up -d
+```
+
+The one thing to get right is the volume at `/config`
+(`MONEYLOVER_CONFIG_DIR`), which holds the token cache. It is not a
+convenience: without it the container logs in on every start, and each login
+spends one of the account's device slots until logins are refused outright. The
+compose file mounts a named volume there.
+
+Uncomment `MONEYLOVER_MCP_ALLOW_STRUCTURE` or `MONEYLOVER_MCP_ALLOW_DELETE`
+there to widen the tool surface.
+
+`docker build --build-arg VERSION=x.y.z` pins a different release.
+
 ### Exposing it safely
 
 This endpoint can create and delete transactions in a real financial account.

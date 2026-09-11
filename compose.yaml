@@ -1,0 +1,28 @@
+# Minimal self-host of the HTTP MCP server. `docker compose up -d`, then point
+# a client at http://localhost:8790/mcp with the bearer token below.
+services:
+  moneylover-mcp:
+    build: .
+    # Or skip the build entirely: image: node:24-slim with a one-line install.
+    restart: unless-stopped
+    environment:
+      MONEYLOVER_EMAIL: ${MONEYLOVER_EMAIL:?set this in .env}
+      MONEYLOVER_PASSWORD: ${MONEYLOVER_PASSWORD:?set this in .env}
+      # The bearer clients must send. Generate with `openssl rand -hex 32`.
+      MCP_TOKEN: ${MCP_TOKEN:?set this in .env}
+      # Creating and renaming wallets and categories. Off unless you want it.
+      # MONEYLOVER_MCP_ALLOW_STRUCTURE: "1"
+      # Deleting them. A deleted wallet takes every transaction in it, and
+      # neither API has an undo, so this one is deliberately separate.
+      # MONEYLOVER_MCP_ALLOW_DELETE: "1"
+    ports:
+      - "8790:8790"
+    volumes:
+      # Not optional. A Money Lover account allows a handful of devices to hold
+      # a token at once and every login registers another; once they are used
+      # up, further logins are refused — including from your phone. Without a
+      # persistent cache, every container restart spends a slot.
+      - moneylover-token-cache:/config
+
+volumes:
+  moneylover-token-cache:

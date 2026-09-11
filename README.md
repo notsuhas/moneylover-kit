@@ -137,6 +137,17 @@ It refuses to start without `MCP_TOKEN`. This endpoint can create and delete
 transactions in a real account; an unauthenticated port is never the right
 default.
 
+**In Docker** — a `Dockerfile` and `compose.yaml` are in the repo:
+
+```bash
+cp .env.example .env      # email, password, and an MCP_TOKEN
+docker compose up -d      # POST localhost:8790/mcp
+```
+
+Mount something persistent at `/config`, as the compose file does. That is where
+the token cache lives, and without it every restart spends one of the account's
+device slots.
+
 Full setup notes, including how to keep an agent from doing something
 irreversible: [docs/mcp.md](docs/mcp.md).
 
