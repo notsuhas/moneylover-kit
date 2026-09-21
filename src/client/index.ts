@@ -6,7 +6,6 @@
  */
 
 import type { AuthOptions } from "../api/auth.js";
-import { createCompositeBackend, describeRouting } from "../api/backends/composite.js";
 import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
 import { type Cache, createCache } from "../core/cache.js";
@@ -42,11 +41,10 @@ import { createStructureApi } from "./structure.js";
 
 export interface ClientOptions extends Omit<AuthOptions, "backend"> {
   /**
-   * Force one API instead of routing per operation.
+   * Force one API instead of using mobile when configured.
    *
-   * The default composes both and sends each call to whichever can do it, so
-   * this is an escape hatch — for reproducing a backend-specific behaviour, or
-   * for pinning a pipeline whose output must not move.
+   * This is an escape hatch for reproducing backend-specific behaviour, or for
+   * pinning a pipeline whose output must not move.
    */
   backend?: BackendName;
   /** Use this backend instead of constructing one. The seam for testing. */
@@ -69,7 +67,7 @@ export interface MoneyLover {
    * caller should have to branch on.
    */
   readonly can: Capabilities;
-  /** Which API served each kind of call. For `whoami` and for bug reports. */
+  /** Which API served the calls. For `whoami` and for bug reports. */
   readonly routing: Record<string, string>;
 
   account(): ReturnType<Backend["account"]>;
@@ -106,13 +104,9 @@ export interface MoneyLover {
   lending(person?: string): Promise<PersonBalance[]>;
 }
 
-/** The mobile API needs the Android app's OAuth client, which not everyone has. */
-const mobileConfigured = (): boolean =>
-  Boolean(process.env.MONEYLOVER_MOBILE_CLIENT && process.env.MONEYLOVER_MOBILE_SECRET);
-
 interface Resolved {
   backend: Backend;
-  /** Which API serves each kind of call, for diagnostics. */
+  /** Which API serves calls, for diagnostics. */
   routing: Record<string, string>;
 }
 
@@ -130,29 +124,13 @@ function resolveBackend(options: ClientOptions, cache: Cache): Resolved {
     throw new MoneyLoverError(`unknown backend ${JSON.stringify(forced)} — use "web" or "mobile"`);
   }
 
-  /**
-   * Nothing forced: compose whatever is reachable and route per operation.
-   *
-   * A bare `token` is deliberately not passed on here — it belongs to one API
-   * and would be rejected by the other. Each backend takes its own token if
-   * given one, and otherwise uses its own cache or logs in.
-   */
-  const shared = { ...options, token: undefined };
-  const parts = {
-    web: createWebBackend(
-      { ...shared, ...(options.webToken ? { token: options.webToken } : {}) },
+  return {
+    backend: createMobileBackend(
+      { ...options, token: options.mobileToken ?? options.token },
       cache,
     ),
-    ...(mobileConfigured()
-      ? {
-          mobile: createMobileBackend(
-            { ...shared, ...(options.mobileToken ? { token: options.mobileToken } : {}) },
-            cache,
-          ),
-        }
-      : {}),
+    routing: { all: "mobile" },
   };
-  return { backend: createCompositeBackend(parts), routing: describeRouting(parts) };
 }
 
 export function createClient(options: ClientOptions = {}): MoneyLover {

@@ -257,10 +257,11 @@ rather than guess.
 It is what the web app itself calls, but it returns a reduced projection with no
 `note`, no `displayDate` and no `account`. Use `transaction/list-all`.
 
-### Mobile has no balances; web has no `createdAt`
+### Mobile has no balance field
 
-The mobile pull returns neither wallet balances nor `createdAt`. The web
-`wallet/list` returns balances. Neither is a superset of the other.
+The mobile wallet pull returns no balance field. The client derives the exact
+balance from its persistent transaction sync, excluding future-dated rows just
+like the app.
 
 Balances exclude **future-dated** transactions, while a transaction list
 includes them, so the two reconcile only after you subtract future rows. If your
@@ -305,17 +306,13 @@ cross-API handle for a category is its name.
 
 There is no get-by-id on either API. The only read is the whole account:
 `transaction/list-all` on web (one request) or `sync/pull/transaction/v2` on
-mobile (45 paginated pulls for ~11k rows). Combined with the full-replace write
+mobile (38 pages of 300 for ~11k rows). Combined with the full-replace write
 format — which means an edit *must* start from the live row — a single-row edit
 costs a whole-account read.
 
-Measured on ~11k transactions: a single edit takes 30s+ through the mobile pull
-and about 10s through web when the list is already cached. If you are putting
-this behind a gateway with a 30s tool timeout, that difference is the
-difference between working and not.
-
-So: cache the list across reads *and* writes, and do single-row writes on
-whichever API your reads already use.
+So: persist the mobile sync checkpoint and rows. After the first full pull,
+balance calculation, search and full-replace edits apply only incremental
+changes to that local mirror.
 
 ### Balances in different currencies are not comparable
 

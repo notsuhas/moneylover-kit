@@ -48,8 +48,8 @@ Fields for \`add\` and \`edit\`
   --exclude-report                      keep it out of spending reports
 
 Global
-  --backend web|mobile                  force one API instead of routing per
-                                        operation; rarely what you want
+  --backend web|mobile                  mobile is always the default; web is
+                                        available only when explicitly forced
   --json                                machine-readable output
   --help
 

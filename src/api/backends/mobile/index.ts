@@ -1,10 +1,10 @@
 /**
  * The mobile backend — `revoapi.moneylover.me`, the Android app's own API.
  *
- * Opt-in, because it needs the app's OAuth client (see src/auth.ts). Worth the
- * setup: it is a sync protocol whose writes fail safe, it has no wrong-id hang,
+ * It needs the app's OAuth client (see src/auth.ts). It is a sync protocol
+ * whose writes fail safe, it has no wrong-id hang,
  * and it exposes the `label` layer, which is the only way to make a category
- * global or nested. It does not report wallet balances.
+ * global or nested. Like the app, it derives wallet balances from synced rows.
  */
 
 import { randomUUID } from "node:crypto";
@@ -13,7 +13,6 @@ import {
   kind,
   normaliseEvent,
   normaliseTransaction,
-  normaliseWallet,
   type WireWallet,
 } from "../../../core/normalise.js";
 import { findCategory, findWallet, signedAmount } from "../../../core/query.js";
@@ -26,16 +25,21 @@ import {
   type Label,
   MoneyLoverError,
   type NewTransaction,
+  type NewWallet,
   type Transaction,
   type TransactionPatch,
   type Wallet,
+  type WalletPatch,
 } from "../../../core/types.js";
 import type { AuthOptions } from "../../auth.js";
 import { unwrap } from "../../http.js";
+import { walletsWithBalances } from "./balances.js";
 import { createEvents } from "./events.js";
 import { createStructure } from "./structure.js";
 import { createSync } from "./sync.js";
+import { createTransactionStore } from "./transaction-store.js";
 import { itemFrom, type PushItem, type RawTransaction } from "./transactions.js";
+import { newWalletItem, walletItem } from "./wallets.js";
 
 interface RawCategory {
   _id: string;
@@ -68,10 +72,21 @@ export function createMobileBackend(
   /** Shared with the client; see core/cache.ts for why this is load-bearing. */
   cache: Cache = createCache(60),
 ): Backend {
-  const { call, pull, push, page } = createSync(auth);
-  const rows = () =>
-    cache.read("mobile:transactions", () => pull<RawTransaction>("/api/sync/pull/transaction/v2"));
+  const { call, pull, pullSince, push, page } = createSync(auth);
+  const store = createTransactionStore(auth, (lastUpdate, options) =>
+    pullSince<RawTransaction>("/api/sync/pull/transaction/v2", lastUpdate, options),
+  );
+  const rows = () => cache.read("mobile:transactions", () => store.sync());
   const invalidate = () => cache.drop("mobile:transactions");
+  const rawWallets = () =>
+    cache.read("mobile:wallets", () => page<WireWallet>("/api/sync/pull/account"));
+  const invalidateWallets = () => cache.drop("mobile:wallets");
+
+  async function walletRow(id: string): Promise<WireWallet> {
+    const row = (await rawWallets()).find((wallet) => wallet._id === id && !wallet.isDelete);
+    if (!row) throw new MoneyLoverError(`no wallet ${id}`);
+    return row;
+  }
 
   async function rowFor(id: string): Promise<RawTransaction> {
     const row = (await rows()).find((t) => t._id === id && !t.isDelete);
@@ -82,9 +97,8 @@ export function createMobileBackend(
   const backend: Backend = {
     name: "mobile",
     can: {
-      // No balance field in the pull, and the wallet push payload is unknown.
-      balances: false,
-      wallets: false,
+      balances: true,
+      wallets: true,
       categories: true,
       labels: true,
       events: true,
@@ -99,8 +113,8 @@ export function createMobileBackend(
     },
 
     async wallets(): Promise<Wallet[]> {
-      const raw = await page<WireWallet>("/api/sync/pull/account");
-      return raw.filter((w) => !w.isDelete).map(normaliseWallet);
+      const [raw, transactions] = await Promise.all([rawWallets(), rows()]);
+      return walletsWithBalances(raw, transactions);
     },
 
     async categories(): Promise<Category[]> {
@@ -137,6 +151,25 @@ export function createMobileBackend(
 
     async transactions(): Promise<Transaction[]> {
       return (await rows()).filter((t) => !t.isDelete).map(normaliseTransaction);
+    },
+
+    async addWallet(input: NewWallet): Promise<string> {
+      const existing = await rawWallets();
+      const id = gid();
+      const sortIndex = Math.max(-1, ...existing.map((wallet) => wallet.sort_index ?? 0)) + 1;
+      await push("account", [newWalletItem(id, input, sortIndex)]);
+      invalidateWallets();
+      return id;
+    },
+
+    async editWallet(id: string, patch: WalletPatch): Promise<void> {
+      await push("account", [walletItem(await walletRow(id), 2, patch)]);
+      invalidateWallets();
+    },
+
+    async deleteWallet(id: string): Promise<void> {
+      await push("account", [walletItem(await walletRow(id), 3)]);
+      invalidateWallets();
     },
 
     async events(): Promise<Event[]> {

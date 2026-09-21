@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+### Patch Changes
+
+- Use one persistent mobile sync for every read and write, including exact
+  balances and wallet create, edit and delete.
+- Refresh and resume automatically without falling back to a web login.
+
 ## 0.1.3
 
 ### Patch Changes

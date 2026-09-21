@@ -27,6 +27,12 @@ export interface WireWallet {
   balance?: Record<string, string>[];
   /** The mobile pull returns soft-deleted rows; the web list does not. */
   isDelete?: boolean;
+  exclude_total?: boolean;
+  account_type?: number;
+  metadata?: string;
+  transaction_notification?: boolean;
+  sort_index?: number;
+  version?: number;
 }
 
 export interface WireTransaction {

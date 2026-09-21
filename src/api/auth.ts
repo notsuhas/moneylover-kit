@@ -27,8 +27,7 @@ function mobileClient(): { id: string; secret: string } {
   if (!id || !secret) {
     throw new MoneyLoverError(
       "The mobile backend needs MONEYLOVER_MOBILE_CLIENT and MONEYLOVER_MOBILE_SECRET.\n" +
-        "See docs/api.md for what they are and how to obtain them, or use the\n" +
-        "default web backend, which needs nothing but your email and password.",
+        "See docs/api.md for what they are and how to obtain them.",
     );
   }
   return { id, secret };

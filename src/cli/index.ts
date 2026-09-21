@@ -57,7 +57,7 @@ const [command = "help", ...args] = positionals;
 const login: Command = async ({ flags: f }) => {
   const email = process.env.MONEYLOVER_EMAIL;
   if (!email) fail("set MONEYLOVER_EMAIL and MONEYLOVER_PASSWORD first");
-  const backend = (f.backend ?? process.env.MONEYLOVER_BACKEND ?? "web") as BackendName;
+  const backend = (f.backend ?? process.env.MONEYLOVER_BACKEND ?? "mobile") as BackendName;
   console.error(
     "Logging in registers a device on your Money Lover account, and an account\n" +
       "allows only a few at once. Once they are used up, further logins are\n" +

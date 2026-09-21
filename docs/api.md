@@ -9,7 +9,7 @@ anything.
 | Used by | the web app | the Android and iOS apps |
 | Style | RPC-ish: one POST per operation | a sync protocol: pull and push |
 | Auth header | `Authorization: AuthJWT <token>` | `Authorization: Bearer <token>` |
-| Wallet balances | **yes** | no |
+| Wallet balances | returned by API | derived from the full sync |
 | `createdAt` | yes | no |
 | Nested / all-wallet categories | not modelled | the `label` layer |
 | Write safety | a wrong id hangs for ~120s | rejected items come back in `failedItems` |
@@ -17,9 +17,9 @@ anything.
 | Events / trips | no route (all 404) | yes |
 | Batched writes | one per request | up to 50 per request |
 
-The client composes both and routes per operation, so you normally do not pick
-one — see the routing table in the README. What follows is what each API can
-actually do.
+The client always uses mobile for normal work. Web is available only when
+explicitly forced for diagnostics; missing mobile credentials fail clearly and
+never trigger a web login.
 
 `spec/web-openapi.yaml` is an OpenAPI 3.1 description of the web API, inferred
 from real responses, plus `spec/web-observed-schemas.json` with per-field
@@ -89,11 +89,10 @@ to `oauth.moneylover.me/request-token`. Then:
 ```bash
 export MONEYLOVER_MOBILE_CLIENT="…"
 export MONEYLOVER_MOBILE_SECRET="…"
-export MONEYLOVER_BACKEND=mobile
 ```
 
-If you don't need balances and don't need nested categories, the web backend is
-the better default and needs none of this.
+The mobile access and refresh token are then the only login the normal client
+needs. Wallet balances are computed from its transaction sync, like the app.
 
 ## Web endpoints
 

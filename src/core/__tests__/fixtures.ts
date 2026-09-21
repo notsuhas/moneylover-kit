@@ -56,15 +56,6 @@ export const WEB_CAN: Capabilities = {
   batchWrites: false,
 };
 
-export const MOBILE_CAN: Capabilities = {
-  balances: false,
-  wallets: false,
-  categories: true,
-  labels: true,
-  events: true,
-  batchWrites: true,
-};
-
 /** Everything on, for testing a client rather than a real backend's limits. */
 export const ALL_CAN: Capabilities = {
   balances: true,

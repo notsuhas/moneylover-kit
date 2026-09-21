@@ -171,39 +171,19 @@ await ml.lending("Sam");
 The CLI and the MCP server are both thin layers over this, so they cannot do
 anything the library can't.
 
-## Two APIs, one client
+## One mobile session
 
-Money Lover's web and mobile clients grew separately and **neither is a
-superset**. Rather than make you pick, this composes both and routes each
-operation to whichever can actually do it:
+When the Android OAuth client is configured, every normal read and transaction
+or category write uses the mobile API. Wallet balances are derived exactly as
+the app derives them: sum the synced rows in integer minor units and exclude
+future-dated transactions. The result matched the web API for every wallet on a
+live 11,239-row account.
 
-|                    | Served by | Because                                             |
-| ------------------ | --------- | --------------------------------------------------- |
-| wallets, balances  | web       | the only one that reports balances                  |
-| transactions       | web       | one request, not 45 paginated pulls                 |
-| categories         | mobile    | its ids are the ones transaction rows reference     |
-| events, labels     | mobile    | every web route for these 404s                      |
-| transaction writes | mobile    | rejected items fail safe; batches; no wrong-id hang |
-| category writes    | mobile    | writes both layers, so nesting and all-wallet work  |
-| wallet writes      | web       | the only one whose payloads are known               |
+The first run stores the full sync beside the token cache. Later reads pull only
+changes since that checkpoint, then balance, transaction and edit calls share
+the local mirror. This is the same shape as the app's local sync database.
 
-Those last two are worth explaining: **neither API can read a single
-transaction.** The only read is "every transaction" — one request on web, 45
-paginated pulls on mobile — and a full-replace write has to start from the live
-row. So a single edit costs a whole-account read, and it matters which API pays
-for it: routing edits to mobile measured 30s+, past a typical gateway timeout,
-while web reuses the list the search already fetched and comes in around 10s.
-
-That routing is measured, not assumed: wallet and transaction ids are identical
-across both APIs (13/13 and 11,194/11,194 on a real account), which is what
-makes it safe to read from one and write to the other. Category ids are _not_
-shared — but every helper takes names, so it never comes up.
-
-`moneylover whoami` prints the live routing table.
-
-With only web credentials you get everything except events, labels, nested and
-all-wallet categories, and batched writes — and asking for one of those names
-the API you're missing instead of failing vaguely. To add mobile:
+To enable mobile:
 
 ```bash
 export MONEYLOVER_MOBILE_CLIENT="…"
@@ -215,12 +195,12 @@ aren't a secret of yours, but they're not published here — a searchable public
 copy is what gets them rotated, which would break every unofficial client at
 once. [docs/api.md](docs/api.md) explains how to get them.
 
-`--backend web|mobile` forces one API. It's an escape hatch for reproducing a
-backend-specific behaviour, not something you should need.
+Without those two values the client fails clearly; it never falls back to a web
+login. `--backend web` remains an explicit diagnostic escape hatch. Wallet
+creation, rename and deletion use the mobile sync protocol too.
 
-Each API issues its own token and rejects the other's, so use
-`MONEYLOVER_WEB_TOKEN` and `MONEYLOVER_MOBILE_TOKEN` if you supply tokens
-directly. A bare `MONEYLOVER_ACCESS_TOKEN` only makes sense with `--backend`.
+Use `MONEYLOVER_MOBILE_TOKEN` if you supply a token directly. Normally the
+cached rotating refresh token is safer because it self-renews.
 
 ## The one thing to know before you start
 
@@ -231,11 +211,11 @@ device limit reached. Please log out to continue." So you don't lose data — yo
 lose the ability to sign in at all, including on a replacement phone, until you
 log out from a device you still have.
 
-So this caches your token under `~/.config/moneylover-kit/` and renews it the
-cheap way. Both APIs rotate their refresh token while keeping the same
-registered device, so a service maintains itself with no further logins. The
-mobile route is non-standard: the Android app sends an empty body to
-`oauth.moneylover.me/refresh-token` with the refresh token as Bearer auth.
+So this caches your token under `~/.config/moneylover-kit/` and renews it
+without registering another device, so a service maintains itself with no
+further logins. The mobile route is non-standard: the Android app sends an empty
+body to `oauth.moneylover.me/refresh-token` with the refresh token as Bearer
+auth.
 
 Set `MONEYLOVER_ACCESS_TOKEN` to supply a token directly and never log in.
 
@@ -245,7 +225,7 @@ Set `MONEYLOVER_ACCESS_TOKEN` to supply a token directly and never log in.
 | ------------------------------------------------------- | --------------------------------- |
 | `MONEYLOVER_EMAIL` · `MONEYLOVER_PASSWORD`              | credentials                       |
 | `MONEYLOVER_ACCESS_TOKEN`                               | use this token, never log in      |
-| `MONEYLOVER_BACKEND`                                    | `web` (default) or `mobile`       |
+| `MONEYLOVER_BACKEND`                                    | force `web` or `mobile`           |
 | `MONEYLOVER_MOBILE_CLIENT` · `MONEYLOVER_MOBILE_SECRET` | required by the mobile backend    |
 | `MONEYLOVER_CONFIG_DIR`                                 | where the token cache lives       |
 | `MCP_TOKEN` · `MCP_PORT` · `MCP_HOST`                   | HTTP MCP transport                |

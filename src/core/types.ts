@@ -8,7 +8,7 @@ export interface Wallet {
   currencyId: number;
   archived: boolean;
   icon?: string;
-  /** Only the web backend reports balances; the mobile pull has no such field. */
+  /** Current balance, excluding future-dated transactions. */
   balance?: Record<string, string>;
 }
 
@@ -170,14 +170,12 @@ export interface CategoryPatch {
 /**
  * What a backend can actually do.
  *
- * The two APIs are not equivalent and neither is a superset, so this exists to
- * be *routed on* rather than read by a user: `createClient` composes both and
- * sends each operation to whichever one can do it.
+ * Backends report the operations they actually implement.
  */
 export interface Capabilities {
-  /** Wallet balances on reads. Web only. */
+  /** Wallet balances on reads. */
   balances: boolean;
-  /** Create, edit and delete wallets. Web only — mobile's payload is unknown. */
+  /** Create, edit and delete wallets. */
   wallets: boolean;
   /** Create, edit and delete categories. */
   categories: boolean;

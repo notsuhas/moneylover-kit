@@ -10,15 +10,27 @@ import { type AuthOptions, MOBILE_APPVERSION as AV, accessToken } from "../../au
 import { post } from "../../http.js";
 
 const API = "https://revoapi.moneylover.me";
-const PAGE = 250;
+const PAGE = 300;
 const BATCH = 50;
 
-export type PushKind = "transaction" | "category" | "label" | "campaign";
+export interface PullResult<T> {
+  data: T[];
+  timestamp: number;
+}
+
+export interface PullOptions<T> {
+  skip?: number;
+  onPage?: (rows: T[], state: { nextSkip: number; timestamp: number }) => void | Promise<void>;
+}
+
+export type PushKind = "transaction" | "category" | "label" | "campaign" | "account";
 
 export interface Sync {
   call<T>(path: string, body?: unknown): Promise<T>;
   /** Drain a paginated pull endpoint. */
   pull<T>(path: string): Promise<T[]>;
+  /** Drain changes since a sync timestamp. */
+  pullSince<T>(path: string, lastUpdate: number, options?: PullOptions<T>): Promise<PullResult<T>>;
   /** Push items in batches; raises anything the server rejected. */
   push(kind: PushKind, items: unknown[]): Promise<number>;
   /** The first page of a pull, for endpoints that never paginate. */
@@ -43,20 +55,49 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
     });
   }
 
-  const window = (skip: number) => ({ last_update: 0, skip, limit: PAGE, av: AV, pl: 1 });
+  const window = (lastUpdate: number, skip: number) => ({
+    last_update: lastUpdate,
+    skip,
+    limit: PAGE,
+    av: AV,
+    pl: 1,
+  });
 
   const page = async <T>(path: string): Promise<T[]> =>
-    (await call<{ data?: T[] }>(path, window(0))).data ?? [];
+    (await call<{ data?: T[] }>(path, window(0, 0))).data ?? [];
 
-  async function pull<T>(path: string): Promise<T[]> {
+  async function pullSince<T>(
+    path: string,
+    lastUpdate: number,
+    options: PullOptions<T> = {},
+  ): Promise<PullResult<T>> {
     const out: T[] = [];
-    for (let skip = 0; ; skip += PAGE) {
-      const res = await call<{ data?: T[] }>(path, window(skip));
-      const chunk = res.data ?? [];
+    let timestamp = lastUpdate;
+    const start = options.skip ?? 0;
+    for (let skip = start; ; skip += PAGE) {
+      const response = await call<{
+        status?: boolean;
+        error?: number;
+        message?: string;
+        data?: T[];
+        timestamp?: number;
+      }>(path, window(lastUpdate, skip));
+      if (response.status === false) {
+        throw new MoneyLoverError(
+          response.message ?? `${path} pull failed`,
+          response.error,
+          response,
+        );
+      }
+      if (skip === start) timestamp = response.timestamp ?? lastUpdate;
+      const chunk = response.data ?? [];
       out.push(...chunk);
-      if (chunk.length < PAGE) return out;
+      await options.onPage?.(chunk, { nextSkip: skip + chunk.length, timestamp });
+      if (chunk.length < PAGE) return { data: out, timestamp };
     }
   }
+
+  const pull = async <T>(path: string): Promise<T[]> => (await pullSince<T>(path, 0)).data;
 
   /**
    * The response is `{status, data:[{gid, syncFlag}], failedItems}` — a
@@ -65,7 +106,7 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
    */
   async function push(kind: PushKind, items: unknown[]): Promise<number> {
     const path =
-      kind === "label" || kind === "campaign"
+      kind === "label" || kind === "campaign" || kind === "account"
         ? `/api/sync/push/${kind}`
         : `/api/sync/push/${kind}/v2`;
     const failed: unknown[] = [];
@@ -84,5 +125,5 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
     return items.length;
   }
 
-  return { call, pull, push, page };
+  return { call, pull, pullSince, push, page };
 }

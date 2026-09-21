@@ -66,8 +66,19 @@ function fakeBackend(seed: Transaction[] = []) {
 }
 
 describe("createClient — backend selection", () => {
-  it("defaults to the web backend", () => {
-    assert.equal(createClient({ token: "t" }).backend, "web");
+  it("defaults to mobile when its client is configured", () => {
+    const before = [process.env.MONEYLOVER_MOBILE_CLIENT, process.env.MONEYLOVER_MOBILE_SECRET];
+    process.env.MONEYLOVER_MOBILE_CLIENT = "client";
+    process.env.MONEYLOVER_MOBILE_SECRET = "secret";
+    try {
+      assert.equal(createClient({ token: "t" }).backend, "mobile");
+    } finally {
+      const [client, secret] = before;
+      if (client === undefined) delete process.env.MONEYLOVER_MOBILE_CLIENT;
+      else process.env.MONEYLOVER_MOBILE_CLIENT = client;
+      if (secret === undefined) delete process.env.MONEYLOVER_MOBILE_SECRET;
+      else process.env.MONEYLOVER_MOBILE_SECRET = secret;
+    }
   });
 
   it("rejects an unknown name rather than defaulting silently", () => {
