@@ -63,9 +63,17 @@ POST https://oauth.moneylover.me/token
 Then `Authorization: Bearer <access_token>`, plus `client`, `apiversion: 4`,
 `platform` and `appversion` headers.
 
-The `refresh_token` has a very long expiry but is not usable: the oauth refresh
-grant errors, and `revoapi` has no refresh route. Treat the 7-day access token
-as the real lifetime.
+The Android app renews the 7-day access token with a non-standard request:
+
+```
+POST https://oauth.moneylover.me/refresh-token
+Authorization: Bearer <refresh_token>
+{}
+  -> {"status": true, "access_token": "…", "refresh_token": "…"}
+```
+
+Send the same `client`, `apiversion`, `platform` and `appversion` headers as the
+normal mobile calls. The refresh token rotates, so persist both returned tokens.
 
 #### The mobile OAuth client
 

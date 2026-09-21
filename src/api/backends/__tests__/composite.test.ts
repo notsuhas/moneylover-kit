@@ -220,7 +220,7 @@ describe("describeRouting", () => {
 });
 
 describe("createCompositeBackend — mobile failing over to web", () => {
-  /** A mobile token cannot be refreshed, so failure has to degrade, not error. */
+  /** A revoked mobile device still has to degrade instead of taking reads down. */
   function failingMobile() {
     const mobile = spy("mobile", MOBILE_CAN);
     const broken: Backend = {

@@ -336,6 +336,67 @@ describe("renewal — web refreshes instead of logging in", () => {
   });
 });
 
+describe("renewal — mobile refreshes instead of registering a device", () => {
+  beforeEach(() => {
+    process.env.MONEYLOVER_EMAIL = "a@b.c";
+    process.env.MONEYLOVER_PASSWORD = "pw";
+    process.env.MONEYLOVER_MOBILE_CLIENT = "mobile-client";
+    process.env.MONEYLOVER_MOBILE_SECRET = "mobile-secret";
+  });
+
+  it("uses the Android app refresh request and persists both rotated tokens", async () => {
+    stubFetch({
+      "/request-token": { request_token: "request" },
+      "oauth.moneylover.me/token": {
+        status: true,
+        access_token: jwt(-10),
+        refresh_token: "refresh-1",
+      },
+    });
+    await accessToken({ backend: "mobile" });
+
+    const renewed = jwt(3600);
+    let init: RequestInit | undefined;
+    globalThis.fetch = (async (input: string | URL, request?: RequestInit) => {
+      assert.match(String(input), /oauth\.moneylover\.me\/refresh-token/);
+      init = request;
+      return json({ status: true, access_token: renewed, refresh_token: "refresh-2" });
+    }) as typeof fetch;
+
+    assert.equal(await accessToken({ backend: "mobile" }), renewed);
+    const headers = init?.headers as Record<string, string>;
+    assert.equal(headers.authorization, "Bearer refresh-1");
+    assert.equal(headers.client, "mobile-client");
+    assert.equal(headers.apiversion, "4");
+    assert.equal(init?.body, "{}");
+
+    const cached = JSON.parse(readFileSync(tokenLocation("mobile", "a@b.c"), "utf8"));
+    assert.equal(cached.refresh_token, "refresh-2");
+  });
+
+  it("does not fall through to a device-registering login when refresh fails", async () => {
+    stubFetch({
+      "/request-token": { request_token: "request" },
+      "oauth.moneylover.me/token": {
+        status: true,
+        access_token: jwt(-10),
+        refresh_token: "dead",
+      },
+    });
+    await accessToken({ backend: "mobile" });
+
+    let logins = 0;
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith("/request-token")) logins += 1;
+      return json({ status: false, code: "invalid_refresh_token" });
+    }) as typeof fetch;
+
+    await assert.rejects(() => accessToken({ backend: "mobile" }), /mobile token refresh failed/);
+    assert.equal(logins, 0);
+  });
+});
+
 describe("renewal — supplied tokens", () => {
   it("uses an opaque token rather than refusing what it cannot parse", async () => {
     globalThis.fetch = (() => {
@@ -360,15 +421,14 @@ describe("renewal — supplied tokens", () => {
     );
   });
 
-  /** Mobile has no refresh, so renewing means a new device. Say so. */
-  it("refuses to silently re-login a mobile token, and names the cost", async () => {
+  it("explains how to seed a refresh token when only an expired mobile token exists", async () => {
     process.env.MONEYLOVER_EMAIL = "a@b.c";
     process.env.MONEYLOVER_PASSWORD = "pw";
     process.env.MONEYLOVER_MOBILE_CLIENT = "id";
     process.env.MONEYLOVER_MOBILE_SECRET = "secret";
     await assert.rejects(
       () => accessToken({ backend: "mobile", token: jwt(-10) }),
-      /registers another device/,
+      /no cached refresh token/,
     );
   });
 });

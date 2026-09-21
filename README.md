@@ -232,15 +232,10 @@ lose the ability to sign in at all, including on a replacement phone, until you
 log out from a device you still have.
 
 So this caches your token under `~/.config/moneylover-kit/` and renews it the
-cheap way. The **web** token renews from its refresh token, which reuses the
-same device and rotates the refresh token — so a web-backed service maintains
-itself forever with no logins after the first.
-
-The **mobile** API has no refresh endpoint, and a fixed device id does not pin a
-slot, so its token can only be replaced by logging in. Rather than do that
-silently, an expired mobile token makes the client **fall back to the web API**:
-transactions keep working, and events, labels and nested categories go quiet
-until the mobile token is renewed. `moneylover whoami` shows what is live.
+cheap way. Both APIs rotate their refresh token while keeping the same
+registered device, so a service maintains itself with no further logins. The
+mobile route is non-standard: the Android app sends an empty body to
+`oauth.moneylover.me/refresh-token` with the refresh token as Bearer auth.
 
 Set `MONEYLOVER_ACCESS_TOKEN` to supply a token directly and never log in.
 

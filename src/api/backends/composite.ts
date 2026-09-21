@@ -143,13 +143,7 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
     categories: route(mobile, web, "category writes"),
   };
 
-  /**
-   * Mobile's token cannot be refreshed — the API has no such endpoint, and a
-   * login would spend one of the account's five device slots. So when it stops
-   * working, mobile is dropped for the rest of the process and the web API
-   * takes over whatever it can. Transactions keep working; events, labels and
-   * nesting go quiet until someone renews the mobile token.
-   */
+  /** A revoked mobile device degrades to web for every operation web supports. */
   let mobileDown: string | undefined;
 
   async function viaMobile<T>(
@@ -173,7 +167,7 @@ export function createCompositeBackend(parts: CompositeParts): Backend {
       console.error(
         `[moneylover] mobile API unavailable, continuing on web: ${mobileDown}\n` +
           "[moneylover] events, labels and nested categories are unavailable until " +
-          "its token is renewed.",
+          "mobile authentication recovers.",
       );
       if (fallback) return fallback();
       throw error;

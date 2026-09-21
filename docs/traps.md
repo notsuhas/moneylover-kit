@@ -29,7 +29,7 @@ returns `e:717` — **reads included**. Nothing about the token looks wrong. If
 everything suddenly 717s, this device is no longer on the account; log in again
 to register a new one.
 
-### Only the web token can be renewed, and only the web token is free
+### Both tokens renew, but through different protocols
 
 The web API renews an access token from its refresh token:
 
@@ -43,12 +43,17 @@ Verified against a live account, the renewed token carries the **same**
 so the chain continues indefinitely. That makes a web-backed service
 self-maintaining.
 
-The mobile API has nothing equivalent. `grant_type=refresh_token` answers
-`InternalServerError` in every shape tried (JSON and form, with and without
-Basic auth, against `/token` and `/refresh-token`), and the web refresh
-endpoint rejects a mobile-issued refresh token with
-`OauthErrorClientSecretNotValidate`. So a mobile token can only be replaced by
-logging in.
+The Android app uses a different, non-standard route:
+
+```
+POST oauth.moneylover.me/refresh-token   Authorization: Bearer <refreshToken>
+{}                                      -> {access_token, refresh_token}
+```
+
+The empty JSON body matters. Standard `grant_type=refresh_token` requests fail,
+and the web refresh endpoint rejects a mobile-issued token. This exact request
+was recovered from Android 8.78.0.171 and verified against a live account: it
+rotates both tokens without registering another device.
 
 ### A fixed `did` does not pin a device
 
@@ -56,7 +61,7 @@ Worth stating because it looks like it should. The mobile login accepts a `did`
 and `na`, but the server issues its own `tokenDevice` UUID regardless: two
 logins one minute apart with an identical `did` produced
 `650bb6fe…` and `a53c0f9b…`. Every login is a new device, so a service that
-logs in weekly exhausts a five-device account in about a month.
+logs in repeatedly still exhausts the account. Refresh instead.
 
 Logins are also rate-limited — a second one seconds later answered
 `TooManyRequests` — so retrying on failure makes things worse, not better.

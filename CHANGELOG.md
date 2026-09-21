@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+### Patch Changes
+
+- Refresh mobile tokens without registering another device.
+
 ## 0.1.2
 
 ### Patch Changes

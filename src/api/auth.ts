@@ -145,17 +145,7 @@ export async function webLogin(
   return { access_token: grant.access_token, refresh_token: grant.refresh_token };
 }
 
-/**
- * Renew a web access token from its refresh token.
- *
- * This is the only renewal path either API offers that costs nothing: verified
- * against a live account, the new token carries the **same** `tokenDevice`, so
- * no device slot is consumed, and the response rotates the refresh token so the
- * chain continues indefinitely. No Authorization header and no client secret.
- *
- * The mobile API has no equivalent — every shape of `grant_type=refresh_token`
- * answers 500, and each mobile login creates a new device.
- */
+/** Renew a web access token without consuming another device slot. */
 async function webRefresh(
   refreshToken: string,
 ): Promise<{ access_token: string; refresh_token?: string }> {
@@ -171,10 +161,34 @@ async function webRefresh(
   return { access_token: grant.access_token, refresh_token: grant.refresh_token };
 }
 
+/** Renew exactly as the Android app does: an empty body and the token as Bearer auth. */
+async function mobileRefresh(
+  refreshToken: string,
+): Promise<{ access_token: string; refresh_token?: string }> {
+  const { id } = mobileClient();
+  const grant = await post<{
+    status?: boolean;
+    access_token?: string;
+    refresh_token?: string;
+  }>(`${OAUTH}/refresh-token`, {
+    headers: {
+      authorization: `Bearer ${refreshToken}`,
+      client: id,
+      apiversion: "4",
+      dataformat: "json",
+      platform: "1",
+      appversion: String(MOBILE_APPVERSION),
+    },
+  });
+  if (!grant?.status || !grant.access_token) {
+    throw new MoneyLoverError("mobile token refresh failed", undefined, grant);
+  }
+  return { access_token: grant.access_token, refresh_token: grant.refresh_token };
+}
+
 /**
  * Mobile password login, via the Android app's OAuth client. Also captcha-free.
- * Returns a 7-day access token and a long-lived refresh token — though the
- * refresh grant is not usable, see docs/traps.md.
+ * Returns a 7-day access token and a long-lived rotating refresh token.
  */
 export async function mobileLogin(
   email: string,
@@ -280,11 +294,9 @@ const renewals = new Map<string, Promise<string>>();
  *   1. an explicit token, if it has not expired — a *seed*, not an override,
  *      or a stale one could never be recovered from
  *   2. the cached token, if it has not expired
- *   3. **web only:** refresh. Costs nothing: the renewed token carries the same
- *      `tokenDevice`, and the refresh token rotates so this continues forever
- *   4. a login, which spends a device slot. The mobile API has no refresh, so
- *      this is its only path — which is why a mobile token expiring should
- *      degrade to web rather than silently log in again.
+ *   3. refresh. Costs nothing: the renewed token keeps the same registered
+ *      device, and the refresh token rotates so this continues forever
+ *   4. a login, which spends a device slot
  */
 export async function accessToken(options: AuthOptions): Promise<string> {
   const opts = fromEnv(options);
@@ -324,12 +336,16 @@ async function renew(opts: AuthOptions, path: string, supplied?: string): Promis
   // Seed the cache from a supplied token's refresh token if that is all we have.
   const refreshToken = cached?.refresh_token;
 
-  if (!opts.force && opts.backend === "web" && refreshToken) {
+  if (!opts.force && refreshToken) {
     try {
-      const grant = await webRefresh(refreshToken);
+      const grant =
+        opts.backend === "mobile"
+          ? await mobileRefresh(refreshToken)
+          : await webRefresh(refreshToken);
       writeCache(path, { ...grant, email: opts.email as string });
       return grant.access_token;
-    } catch {
+    } catch (err) {
+      if (opts.backend === "mobile") throw err;
       // Refresh tokens can be revoked. Fall through to a login rather than
       // failing: that costs a device slot, but it is recoverable and a hard
       // failure is not.
@@ -339,21 +355,15 @@ async function renew(opts: AuthOptions, path: string, supplied?: string): Promis
   if (opts.noLogin) {
     throw new MoneyLoverError(
       `Cannot renew the ${opts.backend} token without logging in, and that is disabled.\n` +
-        (opts.backend === "mobile"
-          ? "The mobile API has no refresh endpoint, so a login is the only option and it\n" +
-            "spends one of the account's device slots. Run `moneylover login --backend mobile`."
-          : "Run `moneylover login`."),
+        `Run \`moneylover login --backend ${opts.backend}\`.`,
     );
   }
 
   if (opts.backend === "mobile" && supplied) {
-    // Being explicit: the caller handed us a mobile token, it has expired, and
-    // renewing it means a new device. Callers that can degrade should.
     throw new MoneyLoverError(
-      "The mobile token has expired. The mobile API has no refresh endpoint, so\n" +
-        "renewing it means a login, and every mobile login registers another device\n" +
-        "against a limit of five. Refresh MONEYLOVER_MOBILE_TOKEN, or drop it and let\n" +
-        "this log in once and cache the result.",
+      "The supplied mobile token has expired and there is no cached refresh token.\n" +
+        "Remove MONEYLOVER_MOBILE_TOKEN, run `moneylover login --backend mobile` once,\n" +
+        "and keep the token cache so future renewals reuse the same device.",
     );
   }
 
