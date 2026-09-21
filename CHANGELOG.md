@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+### Patch Changes
+
+- Retry reads immediately after a temporary cached load failure.
+
 ## 0.1.1
 
 ### Patch Changes

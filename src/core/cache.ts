@@ -28,6 +28,9 @@ export function createCache(seconds: number): Cache {
       if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
       const value = load();
       entries.set(key, { at: Date.now(), value });
+      void value.catch(() => {
+        if (entries.get(key)?.value === value) entries.delete(key);
+      });
       return value;
     },
     drop(...keys: string[]): void {

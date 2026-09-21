@@ -62,4 +62,18 @@ describe("createCache", () => {
     assert.equal(loads, 1);
     assert.equal(x, y);
   });
+
+  it("retries after a cached load rejects", async () => {
+    const cache = createCache(60);
+    let loads = 0;
+
+    await assert.rejects(
+      cache.read("k", async () => {
+        loads += 1;
+        throw new Error("temporary failure");
+      }),
+    );
+
+    assert.equal(await cache.read("k", async () => ++loads), 2);
+  });
 });
