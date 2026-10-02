@@ -182,10 +182,11 @@ Money Lover models money between people with four system categories, marked in
 | `IS_DEBT` | you borrow | income |
 | `IS_REPAYMENT` | you pay it back | expense |
 
-The person goes in `with`. Nothing links the two legs of a loan, so the
-outstanding balance is derived: sum the loans, subtract the collections, group
-by person. Because the person carries it, lending from one wallet and being
-repaid into another reconciles by itself.
+The person goes in `with`. A native collection links to its original loan through
+`pi` on mobile push and `parent._id` on pull. `collectLoan(loanId, input)` writes
+that link, accepts a partial positive amount and a receiving wallet in the same
+currency, and excludes the collection from reports. The receiving wallet may
+differ from the loan wallet. Person totals still sum loans minus collections.
 
 There is also a `debt` resource (`debt/list/full` exists) which the apps use for
 their own loan view. Its shape is not documented here.

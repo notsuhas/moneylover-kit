@@ -31,6 +31,7 @@ export { createWebBackend } from "./api/backends/web/index.js";
 export { post, type RequestOptions, unwrap } from "./api/http.js";
 export { type ClientOptions, createClient, type MoneyLover } from "./client/index.js";
 export {
+  type ILoanCollectionInput,
   type LendingInput,
   type LendingKind,
   lendingCategory,

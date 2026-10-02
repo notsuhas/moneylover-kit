@@ -11,13 +11,13 @@ import {
 import type { Backend, NewTransaction, Transaction, TransactionPatch } from "../core/types.js";
 
 /** A backend that records what it was asked, so the composition is testable. */
-function fakeBackend(seed: Transaction[] = []) {
+function fakeBackend(seed: Transaction[] = [], name: Backend["name"] = "web") {
   const rows = new Map(seed.map((t) => [t.id, t]));
   const calls = { transactions: 0, wallets: 0, add: 0, edit: 0, remove: 0 };
   let lastAdd: NewTransaction | undefined;
 
   const backend: Backend = {
-    name: "web",
+    name,
     can: WEB_CAN,
     account: async () => ({ id: "u1", email: "a@b.c", deviceLimit: 5 }),
     wallets: async () => {
@@ -315,5 +315,110 @@ describe("createClient — retag", () => {
     ]);
     assert.equal(written, 2);
     assert.equal(fake.calls.edit, 2);
+  });
+});
+
+describe("collectLoan", () => {
+  const mobileFake = (seed: Transaction[]) => fakeBackend(seed, "mobile");
+  const loan = aTransaction({
+    id: "loan-id",
+    categoryId: "loan",
+    amount: -1850,
+    people: ["Sam"],
+    eventIds: ["e1"],
+  });
+  for (const wallet of ["Savings", "Current"]) {
+    it(`links a partial collection into ${wallet}`, async () => {
+      const fake = mobileFake([loan]);
+      fake.backend.categories = async () =>
+        [
+          ...lendingCategories,
+          aCategory({
+            id: "current-collect",
+            name: "Collection",
+            metadata: "IS_DEBT_COLLECTION",
+            type: "income",
+            walletId: "w2",
+          }),
+        ].map((category) =>
+          category.id === "collect" ? { ...category, walletId: "w1" } : category,
+        );
+      const row = await createClient({ use: fake.backend }).collectLoan("loan-id", {
+        amount: 140,
+        wallet,
+        date: "2026-09-16",
+        note: "Printouts.",
+      });
+      assert.deepEqual(fake.lastAdd(), {
+        wallet: wallet === "Savings" ? "w1" : "w2",
+        category: wallet === "Savings" ? "collect" : "current-collect",
+        amount: 140,
+        parentId: "loan-id",
+        people: ["Sam"],
+        excludeReport: true,
+        eventId: "e1",
+        date: "2026-09-16",
+        note: "Printouts.",
+      });
+      assert.equal(row.parentId, "loan-id");
+      assert.deepEqual(fake.rows.get("loan-id"), loan);
+    });
+  }
+  it("counts previous linked collections across receiving wallets and rejects overcollection", async () => {
+    const fake = mobileFake([
+      loan,
+      aTransaction({
+        id: "paid",
+        parentId: loan.id,
+        categoryId: "collect",
+        walletId: "w2",
+        amount: 140,
+        type: "income",
+        people: ["Sam"],
+      }),
+    ]);
+    await assert.rejects(
+      () =>
+        createClient({ use: fake.backend }).collectLoan(loan.id, {
+          amount: 1710.01,
+          wallet: "Savings",
+        }),
+      /exceeds/,
+    );
+    assert.equal(fake.calls.add, 0);
+  });
+  it("rejects wrong currency, archived receiving wallets, missing loans and invalid amounts", async () => {
+    for (const receiving of [
+      aWallet({ id: "w2", name: "Current", currencyId: 1 }),
+      aWallet({ id: "w2", name: "Current", archived: true }),
+    ]) {
+      const fake = mobileFake([loan]);
+      fake.backend.wallets = async () => [aWallet({ id: "w1", name: "Savings" }), receiving];
+      await assert.rejects(
+        () =>
+          createClient({ use: fake.backend }).collectLoan(loan.id, {
+            amount: 140,
+            wallet: "Current",
+          }),
+        /currency/,
+      );
+      assert.equal(fake.calls.add, 0);
+    }
+    for (const amount of [0, -1, NaN, Infinity, 0.001]) {
+      const fake = mobileFake([loan]);
+      await assert.rejects(() =>
+        createClient({ use: fake.backend }).collectLoan(loan.id, { amount, wallet: "Savings" }),
+      );
+      assert.equal(fake.calls.add, 0);
+    }
+    const fake = mobileFake([loan]);
+    await assert.rejects(
+      () =>
+        createClient({ use: fake.backend }).collectLoan("missing", {
+          amount: 1,
+          wallet: "Savings",
+        }),
+      /active loan/,
+    );
   });
 });

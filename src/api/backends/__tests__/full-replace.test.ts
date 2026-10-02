@@ -115,6 +115,12 @@ describe("web transaction edit", () => {
 });
 
 describe("mobile itemFrom", () => {
+  it("preserves the parent loan on edits and deletions", () => {
+    for (const flag of [2, 3] as const) {
+      assert.equal(itemFrom({ ...LIVE_ROW, parent: { _id: "loan-id" } }, "c1", flag).pi, "loan-id");
+    }
+    assert.equal(itemFrom(LIVE_ROW, "c1", 2).pi, undefined);
+  });
   it("carries the app's metadata through verbatim", () => {
     const item = itemFrom(LIVE_ROW, "c1", 2);
     assert.equal(item.md, '{"transfer_fee":true}');

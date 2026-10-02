@@ -205,6 +205,7 @@ export function createMobileBackend(
           mr: false,
           n: input.note ?? "",
           p: input.people ?? [],
+          ...(input.parentId ? { pi: input.parentId } : {}),
           rd: 0,
           version: 0,
         } satisfies PushItem,

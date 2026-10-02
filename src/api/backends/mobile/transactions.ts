@@ -38,6 +38,7 @@ export interface PushItem {
   mr: boolean;
   n: string;
   p: string[];
+  pi?: string;
   rd: number;
   version: number;
   isDelete?: boolean;
@@ -70,6 +71,7 @@ export function itemFrom(row: RawTransaction, categoryId: string, f: 1 | 2 | 3):
     mr: Boolean(row.mark_report),
     n: row.note ?? "",
     p: row.with ?? [],
+    ...(row.parent?._id ? { pi: row.parent._id } : {}),
     rd: row.remind ?? 0,
     version: 0,
   };

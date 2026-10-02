@@ -8,6 +8,27 @@ import type { Rendering } from "./transactions.js";
 
 export function registerLendingTools(server: McpServer, client: MoneyLover, show: Rendering): void {
   server.registerTool(
+    "collect_loan",
+    {
+      title: "Collect part of a specific loan",
+      description:
+        "Receive a positive partial payment linked to an original loan ID. The receiving wallet may differ from the loan wallet but must use the same currency. Preserves the original loan and rejects overcollection.",
+      inputSchema: {
+        loanId: z.string().min(1),
+        amount: z.number().positive(),
+        wallet: z.string().describe("Receiving wallet name or ID"),
+        note: z.string().optional(),
+        date: DATE.optional(),
+        eventId: z.string().optional(),
+      },
+    },
+    async ({ loanId, ...input }) => {
+      const row = await client.collectLoan(loanId, input);
+      return json({ transaction: (await show([row]))[0] });
+    },
+  );
+
+  server.registerTool(
     "record_lending",
     {
       title: "Record lending or borrowing",

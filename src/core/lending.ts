@@ -28,6 +28,14 @@ export interface LendingInput {
   date?: string;
 }
 
+export interface ILoanCollectionInput {
+  amount: number;
+  wallet: string;
+  note?: string;
+  date?: string;
+  eventId?: string;
+}
+
 /** Which system category each verb writes to. */
 const CATEGORY_METADATA: Record<LendingKind, string> = {
   lend: "IS_LOAN",

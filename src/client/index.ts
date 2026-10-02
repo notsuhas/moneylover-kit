@@ -10,6 +10,7 @@ import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
 import { type Cache, createCache } from "../core/cache.js";
 import {
+  type ILoanCollectionInput,
   type LendingInput,
   type LendingKind,
   lendingCategory,
@@ -100,6 +101,7 @@ export interface MoneyLover {
 
   /** Record a loan, collection, borrowing or repayment against a person. */
   recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction>;
+  collectLoan(loanId: string, input: ILoanCollectionInput): Promise<Transaction>;
   /** Net position per person, across every wallet. */
   lending(person?: string): Promise<PersonBalance[]>;
 }
@@ -228,6 +230,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         people: input.people ?? [],
         eventIds: input.eventId ? [input.eventId] : [],
         excludeReport: Boolean(input.excludeReport),
+        ...(input.parentId ? { parentId: input.parentId } : {}),
       });
     },
 
@@ -301,6 +304,71 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         people: [input.person],
         eventIds: [],
         excludeReport: false,
+      });
+    },
+
+    async collectLoan(loanId: string, input: ILoanCollectionInput): Promise<Transaction> {
+      if (backend.name !== "mobile") throw new MoneyLoverError("loan linking requires mobile");
+      if (!Number.isFinite(input.amount) || input.amount <= 0) {
+        throw new MoneyLoverError("collection amount must be positive and finite");
+      }
+      if (Math.round(input.amount * 100) === 0)
+        throw new MoneyLoverError("collection is below one minor unit");
+      forgetTransactions();
+      const rows = await allTransactions();
+      const loan = rows.find((row) => row.id === loanId);
+      const cats = await categories();
+      if (!loan || categoryIndex(cats)(loan)?.metadata !== "IS_LOAN" || loan.amount >= 0) {
+        throw new MoneyLoverError("original transaction must be an active loan");
+      }
+      if (loan.people.length !== 1) throw new MoneyLoverError("loan must name exactly one person");
+      const allWallets = await wallets();
+      const receiving = findWallet(allWallets, input.wallet);
+      const origin = findWallet(allWallets, loan.walletId);
+      if (receiving.archived || receiving.currencyId !== origin.currencyId) {
+        throw new MoneyLoverError("receiving wallet must be active and use the loan currency");
+      }
+      const linked = rows.filter((row) => row.parentId === loanId);
+      if (
+        linked.some(
+          (row) =>
+            categoryIndex(cats)(row)?.metadata !== "IS_DEBT_COLLECTION" ||
+            row.amount <= 0 ||
+            findWallet(allWallets, row.walletId).currencyId !== origin.currencyId,
+        )
+      ) {
+        throw new MoneyLoverError("loan has an unexpected linked transaction");
+      }
+      const collected = linked.reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
+      if (Math.round(input.amount * 100) > Math.round(-loan.amount * 100) - collected) {
+        throw new MoneyLoverError("collection exceeds the loan's remaining amount");
+      }
+      const category = lendingCategory(cats, "collect", receiving.id);
+      const eventId = input.eventId ?? (loan.eventIds.length === 1 ? loan.eventIds[0] : undefined);
+      const id = await backend.addTransaction({
+        wallet: receiving.id,
+        category: category.id,
+        amount: input.amount,
+        parentId: loan.id,
+        people: loan.people,
+        excludeReport: true,
+        eventId,
+        note: input.note,
+        date: input.date,
+      });
+      return described({
+        id,
+        date: input.date ?? new Date().toISOString().slice(0, 10),
+        amount: input.amount,
+        note: input.note ?? "",
+        walletId: receiving.id,
+        categoryId: category.id,
+        categoryName: category.name,
+        type: "income",
+        people: loan.people,
+        eventIds: eventId ? [eventId] : [],
+        excludeReport: true,
+        parentId: loan.id,
       });
     },
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+### Patch Changes
+
+- Collect part of a specific loan into any active wallet in the same currency,
+  and preserve the loan link when editing or deleting collections.
+
 ## 0.1.4
 
 ### Patch Changes

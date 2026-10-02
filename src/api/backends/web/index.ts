@@ -114,6 +114,7 @@ export function createWebBackend(
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {
+      if (input.parentId) throw new MoneyLoverError("loan linking requires mobile");
       const wallet = findWallet(await backend.wallets(), input.wallet);
       const category = await resolveCategory(input.category);
       const created = await call<{ _id: string }>("/transaction/add", {
@@ -146,6 +147,7 @@ export function createWebBackend(
      */
     async editTransaction(id: string, patch: TransactionPatch): Promise<void> {
       const row = await rowFor(id);
+      if (row.parent?._id) throw new MoneyLoverError("editing linked collections requires mobile");
       /**
        * Never reuse the row's own category id.
        *

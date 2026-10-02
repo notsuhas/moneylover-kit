@@ -39,6 +39,7 @@ describe("createMcpServer", () => {
 
   const ALWAYS = [
     "add_transaction",
+    "collect_loan",
     "delete_transaction",
     "edit_transaction",
     "lending_summary",

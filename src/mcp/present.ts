@@ -33,6 +33,7 @@ export function naming(wallets: Wallet[], events: Event[], categories: Category[
     events: t.eventIds.map((id) => eventName.get(id) ?? id),
     excludeReport: t.excludeReport,
     ...(t.relatedId ? { transferPair: t.relatedId } : {}),
+    ...(t.parentId ? { loanId: t.parentId } : {}),
   });
 }
 

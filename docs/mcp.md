@@ -10,6 +10,7 @@ Eight tools over a live account. Two transports, same tools.
 | `add_transaction` | create one |
 | `edit_transaction` | change named fields, preserve the rest |
 | `delete_transaction` | remove one, permanently |
+| `collect_loan` | partial collection linked to a loan ID, into a receiving wallet |
 | `record_lending` | lend, collect, borrow or repay, against a person |
 | `lending_summary` | net position per person, across wallets |
 
@@ -174,3 +175,12 @@ confirm the token is actually being sent.
 **`lending_summary` shows a person twice.** `"Sam"` and `"Sam Fielding"` are
 two different tags in your data. Nothing canonicalises them, and merging them
 automatically would be a guess.
+
+`collect_loan` takes `loanId`, positive `amount`, and receiving `wallet` (name or
+ID), with optional `date`, `note`, and `eventId`. It uses the receiving wallet's
+collection category and the original loan's person. The receiving wallet can
+differ from the original, but must be active and use the same currency. Existing
+linked collections reduce the amount still available to collect. The original
+loan is unchanged. Without `eventId`, a single event on the loan is inherited.
+Collections are excluded from reports. Loan linking is supported on mobile;
+web creation or editing of linked collections fails instead of dropping the link.

@@ -46,6 +46,7 @@ export interface WireTransaction {
   campaign?: string[];
   exclude_report?: boolean;
   related?: string;
+  parent?: { _id: string } | null;
   /** The mobile pull returns soft-deleted rows; the web list does not. */
   isDelete?: boolean;
   /**
@@ -91,6 +92,7 @@ export function normaliseTransaction(t: WireTransaction): Transaction {
     eventIds: t.campaign ?? [],
     excludeReport: Boolean(t.exclude_report),
     relatedId: t.related,
+    ...(t.parent?._id ? { parentId: t.parent._id } : {}),
     remindAt: t.remind,
   };
 }
