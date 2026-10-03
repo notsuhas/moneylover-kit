@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+### Patch Changes
+
+- Expose event lookup and tagging through MCP transaction and lending tools.
+
 ## 0.1.5
 
 ### Patch Changes

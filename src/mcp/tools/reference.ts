@@ -25,6 +25,16 @@ export function registerReferenceTools(server: McpServer, client: MoneyLover): v
   );
 
   server.registerTool(
+    "list_events",
+    {
+      title: "List events",
+      description: "Existing events with IDs for tagging transactions and lending.",
+      inputSchema: {},
+    },
+    async () => json(await client.events()),
+  );
+
+  server.registerTool(
     "list_categories",
     {
       title: "List categories",

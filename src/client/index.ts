@@ -291,6 +291,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         people: [input.person],
         ...(input.note !== undefined ? { note: input.note } : {}),
         ...(input.date !== undefined ? { date: input.date } : {}),
+        ...(input.eventId !== undefined ? { eventId: input.eventId } : {}),
       });
       return described({
         id,
@@ -302,7 +303,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         categoryName: category.name,
         type: category.type,
         people: [input.person],
-        eventIds: [],
+        eventIds: input.eventId ? [input.eventId] : [],
         excludeReport: false,
       });
     },

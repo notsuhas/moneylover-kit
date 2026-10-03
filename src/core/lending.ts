@@ -26,6 +26,7 @@ export interface LendingInput {
   wallet: string;
   note?: string;
   date?: string;
+  eventId?: string;
 }
 
 export interface ILoanCollectionInput {

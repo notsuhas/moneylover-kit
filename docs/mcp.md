@@ -1,20 +1,21 @@
 # The MCP server
 
-Eight tools over a live account. Two transports, same tools.
+Ten tools over a live account. Two transports, same tools.
 
 | Tool | Does |
 |---|---|
 | `list_wallets` | wallet names, and balances where the backend has them |
 | `list_categories` | what can be written to, income or expense |
 | `search_transactions` | filter by note, wallet, category, date range, amount |
-| `add_transaction` | create one |
+| `list_events` | event names and IDs for tagging transactions |
+| `add_transaction` | create one, optionally tagged with `eventId` |
 | `edit_transaction` | change named fields, preserve the rest |
 | `delete_transaction` | remove one, permanently |
 | `collect_loan` | partial collection linked to a loan ID, into a receiving wallet |
-| `record_lending` | lend, collect, borrow or repay, against a person |
+| `record_lending` | lend, collect, borrow or repay, with an optional `eventId` |
 | `lending_summary` | net position per person, across wallets |
 
-Those eight are always available. Managing wallets and categories is opt-in,
+Those ten are always available. Managing wallets and categories is opt-in,
 behind two flags rather than one, because the risk is not evenly spread.
 
 `MONEYLOVER_MCP_ALLOW_STRUCTURE=1` adds creating and editing:
@@ -184,3 +185,7 @@ linked collections reduce the amount still available to collect. The original
 loan is unchanged. Without `eventId`, a single event on the loan is inherited.
 Collections are excluded from reports. Loan linking is supported on mobile;
 web creation or editing of linked collections fails instead of dropping the link.
+
+Use `list_events` to find an existing event ID. Pass `eventId` to `add_transaction`,
+`edit_transaction` or `record_lending`. Omit it on edits to preserve existing tags;
+pass `null` to clear them.

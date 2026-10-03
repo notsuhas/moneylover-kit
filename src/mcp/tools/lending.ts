@@ -49,6 +49,7 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         wallet: z.string().describe("Wallet this leg moved through"),
         note: z.string().optional(),
         date: DATE.optional().describe("Defaults to today"),
+        eventId: z.string().min(1).optional().describe("Event ID from list_events"),
       },
     },
     async ({ kind, ...input }) => {

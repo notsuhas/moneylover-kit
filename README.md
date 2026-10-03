@@ -100,8 +100,8 @@ account. `borrow` and `repay` are the mirror for money you owe.
 
 ## MCP server
 
-Two transports. Both expose the same eight tools: `list_wallets`,
-`list_categories`, `search_transactions`, `add_transaction`, `edit_transaction`,
+Two transports. Both expose the same tools: `list_wallets`, `list_categories`,
+`list_events`, `search_transactions`, `add_transaction`, `edit_transaction`,
 `delete_transaction`, `record_lending`, `lending_summary`.
 
 Managing wallets, categories and events is opt-in, behind two flags:

@@ -44,6 +44,7 @@ describe("createMcpServer", () => {
     "edit_transaction",
     "lending_summary",
     "list_categories",
+    "list_events",
     "list_wallets",
     "record_lending",
     "search_transactions",

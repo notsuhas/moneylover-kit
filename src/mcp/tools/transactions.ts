@@ -53,6 +53,7 @@ export function registerTransactionTools(
         note: z.string().optional(),
         date: DATE.optional().describe("Defaults to today"),
         people: z.array(z.string()).optional().describe("Who it was with"),
+        eventId: z.string().min(1).optional().describe("Event ID from list_events"),
         excludeReport: z.boolean().optional().describe("Keep it out of spending reports"),
       },
     },
@@ -76,6 +77,12 @@ export function registerTransactionTools(
         note: z.string().optional(),
         date: DATE.optional(),
         people: z.array(z.string()).optional().describe("Replaces the existing list"),
+        eventId: z
+          .string()
+          .min(1)
+          .nullable()
+          .optional()
+          .describe("Event ID from list_events; null clears the event"),
         excludeReport: z.boolean().optional(),
       },
     },
