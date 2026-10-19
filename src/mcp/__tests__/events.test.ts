@@ -44,20 +44,39 @@ it("MCP exposes event IDs and forwards tags on expenses, edits and loans", async
     assert.match(JSON.stringify(events), /Japan/);
     assert.match(JSON.stringify(events), /e1/);
     for (const [name, args] of [
-      ["add_transaction", { wallet: "Savings", category: "Groceries", amount: -10, eventId: "e1" }],
-      ["edit_transaction", { id: "t1", eventId: "e1" }],
+      [
+        "add_transaction",
+        {
+          wallet: "Savings",
+          category: "Groceries",
+          amount: -10,
+          eventId: "e1",
+          dateTime: "2026-10-19T11:10:00+09:00",
+        },
+      ],
+      ["edit_transaction", { id: "t1", eventId: "e1", dateTime: "2026-10-19T11:10:00+09:00" }],
       ["edit_transaction", { id: "t1", note: "Preserve tag" }],
       ["edit_transaction", { id: "t1", eventId: null }],
       [
         "record_lending",
-        { kind: "lend", person: "Friend", amount: 10, wallet: "Savings", eventId: "e1" },
+        {
+          kind: "lend",
+          person: "Friend",
+          amount: 10,
+          wallet: "Savings",
+          eventId: "e1",
+          dateTime: "2026-10-19T11:10:00+09:00",
+        },
       ],
     ] as const) {
       const result = await client.callTool({ name, arguments: args });
       assert.ok(!result.isError, JSON.stringify(result));
+      if ("dateTime" in args) assert.match(JSON.stringify(result), /2026-10-19T11:10:00/);
       if (name === "record_lending") assert.match(JSON.stringify(result), /Japan/);
     }
     assert.equal(creates.length, 2);
+    assert.ok(creates.every((input) => input.dateTime === "2026-10-19T11:10:00+09:00"));
+    assert.equal(edits[0]?.dateTime, "2026-10-19T11:10:00+09:00");
     assert.ok(creates.every((input) => input.eventId === "e1"));
     assert.equal(edits[0]?.eventId, "e1");
     assert.equal(edits[1]?.eventId, undefined);

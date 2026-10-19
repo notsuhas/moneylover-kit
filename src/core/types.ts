@@ -51,6 +51,8 @@ export interface Transaction {
   id: string;
   /** YYYY-MM-DD. */
   date: string;
+  /** Full timestamp when supplied by the API or caller. */
+  dateTime?: string;
   /** Signed: negative expense, positive income. */
   amount: number;
   note: string;
@@ -81,6 +83,8 @@ export interface NewTransaction {
   note?: string;
   /** YYYY-MM-DD; defaults to today. */
   date?: string;
+  /** ISO timestamp with Z or an explicit UTC offset; mutually exclusive with date. */
+  dateTime?: string;
   people?: string[];
   eventId?: string;
   excludeReport?: boolean;
@@ -91,6 +95,8 @@ export interface TransactionPatch {
   amount?: number;
   note?: string;
   date?: string;
+  /** ISO timestamp with Z or an explicit UTC offset; mutually exclusive with date. */
+  dateTime?: string;
   people?: string[];
   eventId?: string | null;
   excludeReport?: boolean;

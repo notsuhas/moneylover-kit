@@ -15,6 +15,8 @@ export interface Flags {
   note?: string;
   person?: string;
   date?: string;
+  /** ISO timestamp with Z or an explicit UTC offset; mutually exclusive with date. */
+  "date-time"?: string;
   with?: string;
   "exclude-report"?: boolean;
   from?: string;

@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MoneyLover } from "../../client/index.js";
 import type { Transaction } from "../../core/types.js";
-import { DATE, json } from "../present.js";
+import { DATE, DATE_TIME, json } from "../present.js";
 
 export type Rendering = (rows: Transaction[]) => Promise<Record<string, unknown>[]>;
 
@@ -52,6 +52,7 @@ export function registerTransactionTools(
         amount: z.number().describe("Signed: negative expense, positive income"),
         note: z.string().optional(),
         date: DATE.optional().describe("Defaults to today"),
+        dateTime: DATE_TIME.optional(),
         people: z.array(z.string()).optional().describe("Who it was with"),
         eventId: z.string().min(1).optional().describe("Event ID from list_events"),
         excludeReport: z.boolean().optional().describe("Keep it out of spending reports"),
@@ -76,6 +77,7 @@ export function registerTransactionTools(
         amount: z.number().optional().describe("Signed, same rule as add_transaction"),
         note: z.string().optional(),
         date: DATE.optional(),
+        dateTime: DATE_TIME.optional(),
         people: z.array(z.string()).optional().describe("Replaces the existing list"),
         eventId: z
           .string()

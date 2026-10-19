@@ -1,3 +1,4 @@
+import { displayDate } from "../../../core/dates.js";
 /**
  * The web backend — `web.moneylover.me/api`.
  *
@@ -8,7 +9,6 @@
 
 import { type Cache, createCache } from "../../../core/cache.js";
 import {
-  day,
   kind,
   normaliseTransaction,
   normaliseWallet,
@@ -123,7 +123,7 @@ export function createWebBackend(
         category: category.id,
         amount: signedAmount(input.amount, category.type),
         note: input.note ?? "",
-        displayDate: input.date ?? new Date().toISOString().slice(0, 10),
+        displayDate: displayDate(input),
         event: input.eventId ?? "",
         exclude_report: Boolean(input.excludeReport),
         with: input.people ?? [],
@@ -166,7 +166,7 @@ export function createWebBackend(
         category: category.id,
         amount: patch.amount !== undefined ? signedAmount(patch.amount, type) : row.amount,
         note: patch.note ?? row.note ?? "",
-        displayDate: patch.date ?? day(row.displayDate),
+        displayDate: displayDate(patch, row.displayDate),
         event: patch.eventId !== undefined ? (patch.eventId ?? "") : (row.campaign?.[0] ?? ""),
         exclude_report: patch.excludeReport ?? Boolean(row.exclude_report),
         with: patch.people ?? row.with ?? [],

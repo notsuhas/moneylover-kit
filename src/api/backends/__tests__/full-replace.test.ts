@@ -22,7 +22,7 @@ const LIVE_ROW = {
   _id: "t1",
   note: "Dinner",
   amount: 480,
-  displayDate: "2026-01-01T00:00:00.000Z",
+  displayDate: "2026-01-01T11:10:00+09:00",
   account: { _id: "w1" },
   category: { _id: "c1", name: "Restaurants", type: 2 as const },
   with: ["Sam"],
@@ -67,6 +67,7 @@ describe("web transaction edit", () => {
     const backend = createWebBackend({ token: "t" });
     await backend.editTransaction("t1", { note: "Dinner, split" });
     assert.equal(capture.body().note, "Dinner, split");
+    assert.equal(capture.body().displayDate, LIVE_ROW.displayDate);
     assert.equal(capture.body().amount, 480, "amount untouched");
   });
 
@@ -142,8 +143,8 @@ describe("mobile itemFrom", () => {
     assert.equal(item.er, true);
   });
 
-  it("reduces the date to a plain day", () => {
-    assert.equal(itemFrom(LIVE_ROW, "c1", 2).dd, "2026-01-01");
+  it("preserves the complete timestamp", () => {
+    assert.equal(itemFrom(LIVE_ROW, "c1", 2).dd, LIVE_ROW.displayDate);
   });
 
   it("takes the category id it is given, not the row's", () => {

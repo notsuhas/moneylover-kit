@@ -26,6 +26,8 @@ export interface LendingInput {
   wallet: string;
   note?: string;
   date?: string;
+  /** ISO timestamp with Z or UTC offset; mutually exclusive with date. */
+  dateTime?: string;
   eventId?: string;
 }
 
@@ -34,6 +36,8 @@ export interface ILoanCollectionInput {
   wallet: string;
   note?: string;
   date?: string;
+  /** ISO timestamp with Z or UTC offset; mutually exclusive with date. */
+  dateTime?: string;
   eventId?: string;
 }
 
