@@ -7,6 +7,7 @@ import type { PullOptions, PullResult } from "./sync.js";
 import type { RawTransaction } from "./transactions.js";
 
 interface StoredTransactions {
+  version?: 2;
   timestamp: number;
   rows: RawTransaction[];
   pending?: { nextSkip: number; timestamp: number };
@@ -22,7 +23,8 @@ function storePath(email: string): string {
 function read(path: string | undefined): StoredTransactions {
   if (!path) return { timestamp: 0, rows: [] };
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as StoredTransactions;
+    const stored = JSON.parse(readFileSync(path, "utf8")) as StoredTransactions;
+    return stored.version === 2 ? stored : { timestamp: 0, rows: [] };
   } catch {
     return { timestamp: 0, rows: [] };
   }
@@ -33,7 +35,7 @@ function write(path: string | undefined, state: StoredTransactions): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   chmodSync(dirname(path), 0o700);
   const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, JSON.stringify(state), { mode: 0o600 });
+  writeFileSync(temporary, JSON.stringify({ ...state, version: 2 }), { mode: 0o600 });
   renameSync(temporary, path);
   chmodSync(path, 0o600);
 }
@@ -60,26 +62,36 @@ export function createTransactionStore(
   const email = auth.email ?? process.env.MONEYLOVER_EMAIL;
   const path = email ? storePath(email) : undefined;
 
+  let inFlight: Promise<RawTransaction[]> | undefined;
+
+  async function sync(): Promise<RawTransaction[]> {
+    const stored = read(path);
+    const current = stored.pending ? stored : { timestamp: 0, rows: [] };
+    let rows = current.rows;
+    let checkpoint = current.pending?.timestamp;
+    const update = await pull(0, {
+      skip: current.pending?.nextSkip ?? 0,
+      onPage(chunk, state) {
+        rows = mergeTransactions(rows, chunk);
+        checkpoint ??= state.timestamp;
+        write(path, {
+          timestamp: 0,
+          rows,
+          pending: { nextSkip: state.nextSkip, timestamp: checkpoint },
+        });
+      },
+    });
+    if (!path) rows = mergeTransactions(rows, update.data);
+    write(path, { timestamp: checkpoint ?? update.timestamp, rows });
+    return rows;
+  }
+
   return {
-    async sync(): Promise<RawTransaction[]> {
-      const current = read(path);
-      let rows = current.rows;
-      let checkpoint = current.pending?.timestamp;
-      const update = await pull(current.timestamp, {
-        skip: current.pending?.nextSkip ?? 0,
-        onPage(chunk, state) {
-          rows = mergeTransactions(rows, chunk);
-          checkpoint ??= state.timestamp;
-          write(path, {
-            timestamp: current.timestamp,
-            rows,
-            pending: { nextSkip: state.nextSkip, timestamp: checkpoint },
-          });
-        },
+    sync() {
+      inFlight ??= sync().finally(() => {
+        inFlight = undefined;
       });
-      if (!path) rows = mergeTransactions(rows, update.data);
-      write(path, { timestamp: checkpoint ?? update.timestamp, rows });
-      return rows;
+      return inFlight;
     },
   };
 }
