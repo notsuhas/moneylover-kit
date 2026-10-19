@@ -203,3 +203,8 @@ their own loan view. Its shape is not documented here.
   to an empty body, but probing them means writing to a live financial account.
 
 Absence from this document is not evidence of absence from the API.
+
+Mobile transaction reads rebuild from full paginated pulls. Live testing found
+that incremental pulls returned no changes while a full pull contained missing
+accepted writes. Saved snapshots resume interrupted full reads; they are not
+used as an authoritative incremental base.
