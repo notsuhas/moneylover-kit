@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- b214a15: Record exact receipt times using an optional dateTime timestamp with
+  an explicit UTC offset in MCP tools, the client and CLI. Preserve existing
+  timestamps on unrelated edits and return them in tool results.
+
 ## 0.1.6
 
 ### Patch Changes
