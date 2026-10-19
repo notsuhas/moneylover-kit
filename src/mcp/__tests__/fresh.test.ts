@@ -7,6 +7,7 @@ import type { Backend, Transaction } from "../../core/types.js";
 import { createMcpServer } from "../server.js";
 
 test("consecutive MCP reads see external edits and deletions without waiting", async () => {
+  let reads = 0;
   let rows: Transaction[] = [aTransaction({ id: "receipt", amount: -10 })];
   const backend: Backend = {
     name: "web",
@@ -14,7 +15,10 @@ test("consecutive MCP reads see external edits and deletions without waiting", a
     account: async () => ({ id: "user", email: "a@b.c", deviceLimit: 5 }),
     wallets: async () => [aWallet({ id: "w1", name: "Savings" })],
     categories: async () => [aCategory({ id: "c1", name: "Food" })],
-    transactions: async () => rows,
+    transactions: async () => {
+      reads++;
+      return rows;
+    },
     events: async () => [],
     addTransaction: async () => "new",
     editTransaction: async () => {},
@@ -36,6 +40,14 @@ test("consecutive MCP reads see external edits and deletions without waiting", a
     const [content] = result.content as { text: string }[];
     assert.ok(content);
     assert.equal(JSON.parse(content.text).matched, 0);
+    rows = [aTransaction({ id: "receipt", amount: -20 })];
+    reads = 0;
+    const edited = await caller.callTool({
+      name: "edit_transaction",
+      arguments: { id: "receipt", note: "Corrected" },
+    });
+    assert.ok(!edited.isError, JSON.stringify(edited));
+    assert.equal(reads, 1, "one fresh snapshot is reused within an edit");
   } finally {
     await caller.close();
     await server.close();

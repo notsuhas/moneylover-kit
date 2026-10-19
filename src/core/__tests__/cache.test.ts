@@ -77,3 +77,23 @@ describe("createCache", () => {
     assert.equal(await cache.read("k", async () => ++loads), 2);
   });
 });
+
+it("fresh operation scopes isolate concurrent calls and honor write invalidation", async () => {
+  const cache = createCache(0);
+  let loads = 0;
+  const operation = () =>
+    cache.scope(async () => {
+      const first = await cache.read("rows", async () => ++loads);
+      assert.equal(await cache.read("rows", async () => ++loads), first);
+      return first;
+    });
+  const values = await Promise.all([operation(), operation()]);
+  assert.notEqual(values[0], values[1]);
+  assert.equal(loads, 2);
+  await cache.scope(async () => {
+    await cache.read("rows", async () => ++loads);
+    cache.drop("rows");
+    await cache.read("rows", async () => ++loads);
+  });
+  assert.equal(loads, 4);
+});
