@@ -1,6 +1,6 @@
 {
   "name": "@notsuhas/moneylover-kit",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Unofficial Money Lover client, CLI and MCP server. Full transaction CRUD.",
   "license": "MIT",
   "type": "module",
