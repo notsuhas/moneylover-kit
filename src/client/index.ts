@@ -62,6 +62,8 @@ export interface ClientOptions extends Omit<AuthOptions, "backend"> {
 }
 
 export interface MoneyLover {
+  /** Share fresh reads only within one logical operation. */
+  withFreshReads<T>(operation: () => Promise<T>): Promise<T>;
   readonly backend: BackendName;
   /**
    * What is reachable with the credentials given. Every operation is routed
@@ -174,6 +176,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
   const structure = createStructureApi({ backend, cache, wallets, categories });
 
   return {
+    withFreshReads: cache.scope,
     backend: backend.name,
     can: backend.can,
     routing,

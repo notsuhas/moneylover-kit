@@ -132,6 +132,7 @@ describe("createStructureApi — cache invalidation", () => {
   it("drops the transaction cache too, not just the structure entries", async () => {
     const dropped: string[] = [];
     const cache = {
+      scope: <T>(operation: () => Promise<T>) => operation(),
       read: <T>(_k: string, load: () => Promise<T>) => load(),
       drop: (...keys: string[]) => dropped.push(...keys),
     };

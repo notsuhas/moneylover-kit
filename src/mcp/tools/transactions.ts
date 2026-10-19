@@ -31,14 +31,15 @@ export function registerTransactionTools(
         limit: z.number().int().min(1).max(200).default(25),
       },
     },
-    async ({ limit, ...query }) => {
-      const all = await client.transactions(query);
-      return json({
-        matched: all.length,
-        returned: Math.min(all.length, limit),
-        transactions: await show(all.slice(0, limit)),
-      });
-    },
+    async ({ limit, ...query }) =>
+      client.withFreshReads(async () => {
+        const all = await client.transactions(query);
+        return json({
+          matched: all.length,
+          returned: Math.min(all.length, limit),
+          transactions: await show(all.slice(0, limit)),
+        });
+      }),
   );
 
   server.registerTool(
@@ -58,10 +59,11 @@ export function registerTransactionTools(
         excludeReport: z.boolean().optional().describe("Keep it out of spending reports"),
       },
     },
-    async (args) => {
-      const created = await client.addTransaction(args);
-      return json({ created: created.id, transaction: (await show([created]))[0] });
-    },
+    async (args) =>
+      client.withFreshReads(async () => {
+        const created = await client.addTransaction(args);
+        return json({ created: created.id, transaction: (await show([created]))[0] });
+      }),
   );
 
   server.registerTool(
@@ -88,15 +90,16 @@ export function registerTransactionTools(
         excludeReport: z.boolean().optional(),
       },
     },
-    async ({ id, ...patch }) => {
-      if (Object.values(patch).every((v) => v === undefined)) {
-        throw new Error("nothing to change — pass at least one field");
-      }
-      const before = await client.transaction(id);
-      const after = await client.editTransaction(id, patch);
-      const rendered = await show([before, after]);
-      return json({ before: rendered[0], after: rendered[1] });
-    },
+    async ({ id, ...patch }) =>
+      client.withFreshReads(async () => {
+        if (Object.values(patch).every((v) => v === undefined)) {
+          throw new Error("nothing to change — pass at least one field");
+        }
+        const before = await client.transaction(id);
+        const after = await client.editTransaction(id, patch);
+        const rendered = await show([before, after]);
+        return json({ before: rendered[0], after: rendered[1] });
+      }),
   );
 
   server.registerTool(
@@ -106,6 +109,9 @@ export function registerTransactionTools(
       description: "Permanently delete one transaction. There is no undo — confirm first.",
       inputSchema: { id: z.string().describe("Transaction id from search_transactions") },
     },
-    async ({ id }) => json({ deleted: (await show([await client.deleteTransaction(id)]))[0] }),
+    async ({ id }) =>
+      client.withFreshReads(async () =>
+        json({ deleted: (await show([await client.deleteTransaction(id)]))[0] }),
+      ),
   );
 }

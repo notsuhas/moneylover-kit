@@ -23,10 +23,11 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         eventId: z.string().optional(),
       },
     },
-    async ({ loanId, ...input }) => {
-      const row = await client.collectLoan(loanId, input);
-      return json({ transaction: (await show([row]))[0] });
-    },
+    async ({ loanId, ...input }) =>
+      client.withFreshReads(async () => {
+        const row = await client.collectLoan(loanId, input);
+        return json({ transaction: (await show([row]))[0] });
+      }),
   );
 
   server.registerTool(
@@ -54,10 +55,11 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         eventId: z.string().min(1).optional().describe("Event ID from list_events"),
       },
     },
-    async ({ kind, ...input }) => {
-      const row = await client.recordLending(kind, input);
-      return json({ recorded: kind, transaction: (await show([row]))[0] });
-    },
+    async ({ kind, ...input }) =>
+      client.withFreshReads(async () => {
+        const row = await client.recordLending(kind, input);
+        return json({ recorded: kind, transaction: (await show([row]))[0] });
+      }),
   );
 
   server.registerTool(
@@ -72,18 +74,19 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         person: z.string().optional().describe("Substring match on the person tag"),
       },
     },
-    async ({ person }) => {
-      const rows = await client.lending(person);
-      // Totals per currency: summing across them would invent an exchange rate.
-      const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {
-        const mine = rows.filter((r) => r.currencyId === currencyId);
-        return {
-          currencyId,
-          owedToYou: mine.reduce((sum, r) => sum + r.outstanding, 0),
-          youOwe: mine.reduce((sum, r) => sum + r.owing, 0),
-        };
-      });
-      return json({ people: rows, totals });
-    },
+    async ({ person }) =>
+      client.withFreshReads(async () => {
+        const rows = await client.lending(person);
+        // Totals per currency: summing across them would invent an exchange rate.
+        const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {
+          const mine = rows.filter((r) => r.currencyId === currencyId);
+          return {
+            currencyId,
+            owedToYou: mine.reduce((sum, r) => sum + r.outstanding, 0),
+            youOwe: mine.reduce((sum, r) => sum + r.owing, 0),
+          };
+        });
+        return json({ people: rows, totals });
+      }),
   );
 }
