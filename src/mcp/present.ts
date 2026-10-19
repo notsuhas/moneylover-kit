@@ -10,6 +10,12 @@ import type { Category, Event, Transaction, Wallet } from "../core/types.js";
 
 export const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
 
+export const DATE_TIME = z.iso
+  .datetime({ offset: true })
+  .describe(
+    "ISO timestamp with Z or UTC offset, e.g. 2026-10-19T11:10:00+09:00. Do not combine with date.",
+  );
+
 export const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 1) }],
 });
@@ -25,6 +31,7 @@ export function naming(wallets: Wallet[], events: Event[], categories: Category[
   return (t) => ({
     id: t.id,
     date: t.date,
+    ...(t.dateTime ? { dateTime: t.dateTime } : {}),
     amount: t.amount,
     note: t.note,
     category: lookup(t)?.name ?? t.categoryName ?? t.categoryId,

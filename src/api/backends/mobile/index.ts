@@ -1,3 +1,4 @@
+import { displayDate } from "../../../core/dates.js";
 /**
  * The mobile backend — `revoapi.moneylover.me`, the Android app's own API.
  *
@@ -194,7 +195,7 @@ export function createMobileBackend(
           ac: wallet.id,
           c: category.id,
           cp: input.eventId ? [input.eventId] : [],
-          dd: input.date ?? new Date().toISOString().slice(0, 10),
+          dd: displayDate(input),
           er: Boolean(input.excludeReport),
           f: 1,
           gid: id,
@@ -223,7 +224,7 @@ export function createMobileBackend(
       const type = category?.type ?? kind(row.category.type);
       if (patch.amount !== undefined) item.a = signedAmount(patch.amount, type);
       if (patch.note !== undefined) item.n = patch.note;
-      if (patch.date !== undefined) item.dd = patch.date;
+      if (patch.date !== undefined || patch.dateTime !== undefined) item.dd = displayDate(patch);
       if (patch.people !== undefined) item.p = patch.people;
       if (patch.eventId !== undefined) item.cp = patch.eventId ? [patch.eventId] : [];
       if (patch.excludeReport !== undefined) item.er = patch.excludeReport;

@@ -3,7 +3,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MoneyLover } from "../../client/index.js";
-import { DATE, json } from "../present.js";
+import { DATE, DATE_TIME, json } from "../present.js";
 import type { Rendering } from "./transactions.js";
 
 export function registerLendingTools(server: McpServer, client: MoneyLover, show: Rendering): void {
@@ -19,6 +19,7 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         wallet: z.string().describe("Receiving wallet name or ID"),
         note: z.string().optional(),
         date: DATE.optional(),
+        dateTime: DATE_TIME.optional(),
         eventId: z.string().optional(),
       },
     },
@@ -49,6 +50,7 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         wallet: z.string().describe("Wallet this leg moved through"),
         note: z.string().optional(),
         date: DATE.optional().describe("Defaults to today"),
+        dateTime: DATE_TIME.optional(),
         eventId: z.string().min(1).optional().describe("Event ID from list_events"),
       },
     },

@@ -28,6 +28,7 @@ const options = {
   note: { type: "string" },
   person: { type: "string" },
   date: { type: "string" },
+  "date-time": { type: "string" },
   with: { type: "string" },
   "exclude-report": { type: "boolean" },
   from: { type: "string" },

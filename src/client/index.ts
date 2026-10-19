@@ -9,6 +9,7 @@ import type { AuthOptions } from "../api/auth.js";
 import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
 import { type Cache, createCache } from "../core/cache.js";
+import { transactionDate } from "../core/dates.js";
 import {
   type ILoanCollectionInput,
   type LendingInput,
@@ -213,6 +214,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     transaction,
 
     async addTransaction(input: NewTransaction): Promise<Transaction> {
+      const time = transactionDate(input);
       const [wallet, category] = await Promise.all([
         findWallet(await wallets(), input.wallet),
         findCategory(await categories(), input.category),
@@ -220,7 +222,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       const id = await backend.addTransaction(input);
       return described({
         id,
-        date: input.date ?? new Date().toISOString().slice(0, 10),
+        ...time,
         amount: input.amount,
         note: input.note ?? "",
         walletId: wallet.id,
@@ -237,12 +239,14 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     async editTransaction(id: string, patch: TransactionPatch): Promise<Transaction> {
       const before = await transaction(id);
       const category = patch.category ? findCategory(await categories(), patch.category) : null;
+      const time = transactionDate(patch, before.dateTime ?? before.date);
       await backend.editTransaction(id, patch);
+      const { dateTime: _previousTime, ...unchanged } = before;
       return described({
-        ...before,
+        ...unchanged,
         ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
         ...(patch.note !== undefined ? { note: patch.note } : {}),
-        ...(patch.date !== undefined ? { date: patch.date } : {}),
+        ...time,
         ...(patch.people !== undefined ? { people: patch.people } : {}),
         ...(patch.excludeReport !== undefined ? { excludeReport: patch.excludeReport } : {}),
         ...(patch.eventId !== undefined ? { eventIds: patch.eventId ? [patch.eventId] : [] } : {}),
@@ -276,6 +280,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     },
 
     async recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction> {
+      const time = transactionDate(input);
       if (input.amount <= 0) {
         throw new MoneyLoverError(
           `amount must be positive — \`${kind}\` already sets the direction`,
@@ -291,11 +296,12 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         people: [input.person],
         ...(input.note !== undefined ? { note: input.note } : {}),
         ...(input.date !== undefined ? { date: input.date } : {}),
+        ...(input.dateTime !== undefined ? { dateTime: input.dateTime } : {}),
         ...(input.eventId !== undefined ? { eventId: input.eventId } : {}),
       });
       return described({
         id,
-        date: input.date ?? new Date().toISOString().slice(0, 10),
+        ...time,
         amount,
         note: input.note ?? "",
         walletId: wallet.id,
@@ -316,6 +322,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       if (Math.round(input.amount * 100) === 0)
         throw new MoneyLoverError("collection is below one minor unit");
       forgetTransactions();
+      const time = transactionDate(input);
       const rows = await allTransactions();
       const loan = rows.find((row) => row.id === loanId);
       const cats = await categories();
@@ -356,10 +363,11 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         eventId,
         note: input.note,
         date: input.date,
+        ...(input.dateTime !== undefined ? { dateTime: input.dateTime } : {}),
       });
       return described({
         id,
-        date: input.date ?? new Date().toISOString().slice(0, 10),
+        ...time,
         amount: input.amount,
         note: input.note ?? "",
         walletId: receiving.id,

@@ -82,6 +82,7 @@ export function normaliseTransaction(t: WireTransaction): Transaction {
   return {
     id: t._id,
     date: day(t.displayDate),
+    ...(t.displayDate.includes("T") ? { dateTime: t.displayDate } : {}),
     amount: t.category.type === 1 ? t.amount : -t.amount,
     note: t.note ?? "",
     walletId: t.account._id,

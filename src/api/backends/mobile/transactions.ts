@@ -8,7 +8,6 @@
  */
 
 import type { WireTransaction } from "../../../core/normalise.js";
-import { day } from "../../../core/normalise.js";
 
 /**
  * The pull carries more than the normalised shape needs, and a push is a full
@@ -57,7 +56,7 @@ export function itemFrom(row: RawTransaction, categoryId: string, f: 1 | 2 | 3):
     ac: row.account._id,
     c: categoryId,
     cp: row.campaign ?? [],
-    dd: day(row.displayDate),
+    dd: row.displayDate,
     er: Boolean(row.exclude_report),
     f,
     gid: row._id,

@@ -10,6 +10,7 @@ const fields = ({ flags, number, list, defined }: Ctx) =>
     category: flags.category,
     amount: number(flags.amount, "amount"),
     note: flags.note,
+    dateTime: flags["date-time"],
     date: flags.date,
     people: list(flags.with),
     excludeReport: flags["exclude-report"],
