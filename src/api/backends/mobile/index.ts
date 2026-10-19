@@ -1,4 +1,5 @@
 import { displayDate } from "../../../core/dates.js";
+import { receiptMetadata } from "../../../core/receipt-time.js";
 /**
  * The mobile backend — `revoapi.moneylover.me`, the Android app's own API.
  *
@@ -202,7 +203,7 @@ export function createMobileBackend(
           im: [],
           la: 0,
           lo: 0,
-          md: "{}",
+          md: input.dateTime ? receiptMetadata(undefined, input.dateTime) : "{}",
           mr: false,
           n: input.note ?? "",
           p: input.people ?? [],
@@ -225,6 +226,7 @@ export function createMobileBackend(
       if (patch.amount !== undefined) item.a = signedAmount(patch.amount, type);
       if (patch.note !== undefined) item.n = patch.note;
       if (patch.date !== undefined || patch.dateTime !== undefined) item.dd = displayDate(patch);
+      if (patch.dateTime !== undefined) item.md = receiptMetadata(row.metadata, patch.dateTime);
       if (patch.people !== undefined) item.p = patch.people;
       if (patch.eventId !== undefined) item.cp = patch.eventId ? [patch.eventId] : [];
       if (patch.excludeReport !== undefined) item.er = patch.excludeReport;

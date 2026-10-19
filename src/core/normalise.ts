@@ -7,6 +7,7 @@
  * writes, and which extra fields exist; that is what the backends are for.
  */
 
+import { receiptTime } from "./receipt-time.js";
 import type { Event, Transaction, Wallet } from "./types.js";
 
 /** Money Lover encodes direction in the category, where 1 is income and 2 expense. */
@@ -79,10 +80,11 @@ export function normaliseWallet(w: WireWallet): Wallet {
  * category's type. Every caller above this point sees a signed amount.
  */
 export function normaliseTransaction(t: WireTransaction): Transaction {
+  const displayDate = receiptTime(t.displayDate, t.metadata) ?? t.displayDate;
   return {
     id: t._id,
-    date: day(t.displayDate),
-    ...(t.displayDate.includes("T") ? { dateTime: t.displayDate } : {}),
+    date: day(displayDate),
+    ...(displayDate.includes("T") ? { dateTime: displayDate } : {}),
     amount: t.category.type === 1 ? t.amount : -t.amount,
     note: t.note ?? "",
     walletId: t.account._id,

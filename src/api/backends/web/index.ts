@@ -1,4 +1,5 @@
 import { displayDate } from "../../../core/dates.js";
+import { receiptMetadata } from "../../../core/receipt-time.js";
 /**
  * The web backend — `web.moneylover.me/api`.
  *
@@ -124,6 +125,7 @@ export function createWebBackend(
         amount: signedAmount(input.amount, category.type),
         note: input.note ?? "",
         displayDate: displayDate(input),
+        ...(input.dateTime ? { metadata: receiptMetadata(undefined, input.dateTime) } : {}),
         event: input.eventId ?? "",
         exclude_report: Boolean(input.excludeReport),
         with: input.people ?? [],
@@ -177,7 +179,9 @@ export function createWebBackend(
         addressIcon: row.address?.icon ?? "",
         image: row.images?.[0] ?? "",
         remind: row.remind ?? 0,
-        metadata: row.metadata ?? "",
+        metadata: patch.dateTime
+          ? receiptMetadata(row.metadata, patch.dateTime)
+          : (row.metadata ?? ""),
       });
       invalidate();
     },
