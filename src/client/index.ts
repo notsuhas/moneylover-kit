@@ -88,6 +88,7 @@ export interface MoneyLover {
   /** One row by id. Throws if it does not exist. */
   transaction(id: string): Promise<Transaction>;
   addTransaction(input: NewTransaction): Promise<Transaction>;
+  addTransactions(inputs: NewTransaction[]): Promise<Transaction[]>;
   editTransaction(id: string, patch: TransactionPatch): Promise<Transaction>;
   deleteTransaction(id: string): Promise<Transaction>;
   /**
@@ -137,6 +138,28 @@ function resolveBackend(options: ClientOptions, cache: Cache): Resolved {
       cache,
     ),
     routing: { all: "mobile" },
+  };
+}
+
+function createdTransaction(
+  id: string,
+  input: NewTransaction,
+  wallet: Wallet,
+  category: Category,
+): Transaction {
+  return {
+    id,
+    ...transactionDate(input),
+    amount: input.amount,
+    note: input.note ?? "",
+    walletId: wallet.id,
+    categoryId: category.id,
+    categoryName: category.name,
+    type: category.type,
+    people: input.people ?? [],
+    eventIds: input.eventId ? [input.eventId] : [],
+    excludeReport: Boolean(input.excludeReport),
+    ...(input.parentId ? { parentId: input.parentId } : {}),
   };
 }
 
@@ -222,25 +245,37 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     transaction,
 
     async addTransaction(input: NewTransaction): Promise<Transaction> {
-      const time = transactionDate(input);
       const [wallet, category] = await Promise.all([
-        findWallet(await walletCatalog(), input.wallet),
-        findCategory(await categories(), input.category),
+        walletCatalog().then((all) => findWallet(all, input.wallet)),
+        categories().then((all) => findCategory(all, input.category)),
       ]);
+      transactionDate(input);
       const id = await backend.addTransaction(input);
-      return described({
-        id,
-        ...time,
-        amount: input.amount,
-        note: input.note ?? "",
-        walletId: wallet.id,
-        categoryId: category.id,
-        categoryName: category.name,
-        type: category.type,
-        people: input.people ?? [],
-        eventIds: input.eventId ? [input.eventId] : [],
-        excludeReport: Boolean(input.excludeReport),
-        ...(input.parentId ? { parentId: input.parentId } : {}),
+      return described(createdTransaction(id, input, wallet, category));
+    },
+
+    async addTransactions(inputs: NewTransaction[]): Promise<Transaction[]> {
+      const [allWallets, allCategories] = await Promise.all([walletCatalog(), categories()]);
+      const targets = inputs.map((input) => {
+        transactionDate(input);
+        const wallet = findWallet(allWallets, input.wallet);
+        const category = findCategory(allCategories, input.category, wallet.id);
+        if ((category.type === "expense") !== input.amount < 0)
+          throw new MoneyLoverError("Amount sign disagrees with category");
+        return { wallet, category };
+      });
+      let ids: string[];
+      if (backend.addTransactions) ids = await backend.addTransactions(inputs);
+      else {
+        ids = [];
+        for (const input of inputs) ids.push(await backend.addTransaction(input));
+      }
+      if (ids.length !== inputs.length) throw new MoneyLoverError("Incomplete transaction batch");
+      return inputs.map((input, index) => {
+        const target = targets[index];
+        const id = ids[index];
+        if (!target || !id) throw new MoneyLoverError("Incomplete transaction batch");
+        return described(createdTransaction(id, input, target.wallet, target.category));
       });
     },
 

@@ -208,3 +208,36 @@ Mobile transaction reads rebuild from full paginated pulls. Live testing found
 that incremental pulls returned no changes while a full pull contained missing
 accepted writes. Saved snapshots resume interrupted full reads; they are not
 used as an authoritative incremental base.
+
+## Verified receipt recording
+
+Use the MCP `record_transactions` tool for a receipt instead of separate search,
+write and verification calls. Supply a stable `receiptId` and all entries at once.
+Regular expenses use a signed `amount` and existing `category`. Lending entries
+use a positive amount, `kind` (`lend`, `borrow`, `collect`, `repay`) and `person`.
+When someone paid for you, combine your personal expense with `kind: borrow` in
+the same wallet so its net movement is zero. Optional `original` retains the
+original amount and currency in the private receipt journal; `amount` remains
+the actual debit in the wallet currency.
+
+The mobile backend validates the full batch, then submits one push. The upstream
+API can accept only some entries, so this is not a distributed or atomic commit.
+A private journal under the existing config directory records the intent before
+writing. Retries with the same ID and identical inputs reconcile fresh data;
+conflicts, deleted records and uncertain missing entries stop without another
+write. Do not switch IDs after a timeout. A stale `writer.lock` after a process
+crash requires reconciliation and operator removal before recording can resume.
+
+Successful responses include `verified: true`, saved transactions and current
+balances for their wallets. No additional search or balance call is needed.
+Fresh reconciliation still reads full history; no persistent read TTL is added.
+
+`get_transactions` returns only requested IDs from one fresh reconciliation.
+`collect_loan_cross_currency` takes both the amount cleared in the original
+loan currency and the actual amount received in the destination wallet currency.
+It records a linked collection in the original wallet, an excluded outgoing
+system transfer there, and an excluded incoming system transfer in the receiving
+wallet. The original wallet nets to zero; the receiving wallet gains exactly the
+supplied amount. Overcollection and currency precision are checked. No exchange
+rate is guessed. These are separate system-category transfer entries, not a
+native paired-transfer object. The same journal and timeout protections apply.

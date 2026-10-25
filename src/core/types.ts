@@ -218,6 +218,7 @@ export interface Backend {
   /** Global, nestable category records. Mobile only — the web API has no equivalent. */
   labels?(): Promise<Label[]>;
   addTransaction(input: NewTransaction): Promise<string>;
+  addTransactions?(inputs: NewTransaction[]): Promise<string[]>;
   editTransaction(id: string, patch: TransactionPatch): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
   /**

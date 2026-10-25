@@ -9,11 +9,13 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { type ClientOptions, createClient, type MoneyLover } from "../client/index.js";
 import type { Transaction } from "../core/types.js";
-import { INSTRUCTIONS, naming } from "./present.js";
+import { INSTRUCTIONS, json, naming } from "./present.js";
 import { deletionsAllowed, registerDeletionTools } from "./tools/deletions.js";
 import { registerLendingTools } from "./tools/lending.js";
+import { registerRecordingTool } from "./tools/recording.js";
 import { registerReferenceTools } from "./tools/reference.js";
 import { registerStructureTools, structureAllowed } from "./tools/structure.js";
 import { type Rendering, registerTransactionTools } from "./tools/transactions.js";
@@ -40,6 +42,31 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
     return rows.map(name);
   };
 
+  server.registerTool(
+    "get_transactions",
+    {
+      title: "Get saved transactions by ID",
+      description:
+        "Return only the requested saved records, using one fresh reconciliation. Money Lover still downloads full history internally. Prefer record_transactions for new receipts; its verified response needs no extra lookup.",
+      inputSchema: { ids: z.array(z.string().min(1)).min(1).max(50) },
+    },
+    async ({ ids }) =>
+      client.withFreshReads(async () => {
+        const rows = await Promise.all(ids.map((id) => client.transaction(id)));
+        return json({ transactions: await show(rows) });
+      }),
+  );
+  registerRecordingTool(
+    server,
+    client,
+    show,
+    options.email?.toLowerCase() ??
+      process.env.MONEYLOVER_EMAIL?.toLowerCase() ??
+      options.mobileToken ??
+      options.token ??
+      process.env.MONEYLOVER_MOBILE_TOKEN ??
+      process.env.MONEYLOVER_ACCESS_TOKEN,
+  );
   registerReferenceTools(server, client);
   registerTransactionTools(server, client, show);
   registerLendingTools(server, client, show);

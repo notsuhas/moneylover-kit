@@ -40,13 +40,16 @@ describe("createMcpServer", () => {
   const ALWAYS = [
     "add_transaction",
     "collect_loan",
+    "collect_loan_cross_currency",
     "delete_transaction",
     "edit_transaction",
+    "get_transactions",
     "lending_summary",
     "list_categories",
     "list_events",
     "list_wallets",
     "record_lending",
+    "record_transactions",
     "search_transactions",
   ];
   const STRUCTURE = [

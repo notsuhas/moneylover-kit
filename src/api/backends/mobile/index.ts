@@ -99,6 +99,42 @@ export function createMobileBackend(
     return row;
   }
 
+  async function addMany(inputs: NewTransaction[]): Promise<string[]> {
+    if (!inputs.length || inputs.length > 50)
+      throw new MoneyLoverError("Batch must contain 1–50 transactions");
+    const [wallets, categories] = await Promise.all([walletCatalog(), backend.categories()]);
+    const ids = inputs.map(() => gid());
+    const items = inputs.map((input, index) => {
+      const wallet = findWallet(wallets, input.wallet);
+      const category = findCategory(categories, input.category, wallet.id);
+      const id = ids[index];
+      if (!id) throw new MoneyLoverError("Missing transaction ID");
+      return {
+        a: signedAmount(input.amount, category.type),
+        ac: wallet.id,
+        c: category.id,
+        cp: input.eventId ? [input.eventId] : [],
+        dd: displayDate(input),
+        er: Boolean(input.excludeReport),
+        f: 1,
+        gid: id,
+        im: [],
+        la: 0,
+        lo: 0,
+        md: input.dateTime ? receiptMetadata(undefined, input.dateTime) : "{}",
+        mr: false,
+        n: input.note ?? "",
+        p: input.people ?? [],
+        ...(input.parentId ? { pi: input.parentId } : {}),
+        rd: 0,
+        version: 0,
+      } satisfies PushItem;
+    });
+    await push("transaction", items);
+    invalidate();
+    return ids;
+  }
+
   const backend: Backend = {
     name: "mobile",
     can: {
@@ -192,34 +228,11 @@ export function createMobileBackend(
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {
-      const wallet = findWallet(await walletCatalog(), input.wallet);
-      const category = findCategory(await backend.categories(), input.category, wallet.id);
-      const id = gid();
-      await push("transaction", [
-        {
-          a: signedAmount(input.amount, category.type),
-          ac: wallet.id,
-          c: category.id,
-          cp: input.eventId ? [input.eventId] : [],
-          dd: displayDate(input),
-          er: Boolean(input.excludeReport),
-          f: 1,
-          gid: id,
-          im: [],
-          la: 0,
-          lo: 0,
-          md: input.dateTime ? receiptMetadata(undefined, input.dateTime) : "{}",
-          mr: false,
-          n: input.note ?? "",
-          p: input.people ?? [],
-          ...(input.parentId ? { pi: input.parentId } : {}),
-          rd: 0,
-          version: 0,
-        } satisfies PushItem,
-      ]);
-      invalidate();
+      const [id] = await addMany([input]);
+      if (!id) throw new MoneyLoverError("No transaction ID returned");
       return id;
     },
+    addTransactions: addMany,
 
     async editTransaction(id: string, patch: TransactionPatch): Promise<void> {
       const row = await rowFor(id);

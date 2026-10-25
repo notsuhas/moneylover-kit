@@ -46,6 +46,11 @@ export function naming(wallets: Wallet[], events: Event[], categories: Category[
 
 export const INSTRUCTIONS = `Read and write transactions in a live Money Lover account.
 
+For new receipts prefer record_transactions: it performs duplicate checks, batches all
+expense and lending/borrowing legs, and returns verified saved records and balances.
+Keep a stable receiptId. Do not repeat search_transactions or list_wallets after verified=true.
+Run independent apps in parallel and reuse known wallet/category IDs and loaded schemas.
+
 Amounts are signed: negative is an expense, positive is income. Money Lover
 stores the sign in the category's type rather than the amount, so an amount
 whose sign disagrees with the category is rejected instead of being corrected.

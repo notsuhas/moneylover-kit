@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- Add record_transactions to check duplicate receipts, batch personal and
+  lending or borrowing entries in one push, and verify fresh saved records and
+  wallet balances. Persist private idempotency journals and stop uncertain or
+  partial writes from being retried blindly.
+- Add targeted saved-record lookup and explicit cross-currency loan collection
+  using both actual amounts, linked collection and excluded system transfer
+  legs.
+
 ## 0.2.3
 
 ### Patch Changes
