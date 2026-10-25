@@ -15,6 +15,7 @@ import {
   kind,
   normaliseEvent,
   normaliseTransaction,
+  normaliseWallet,
   type WireWallet,
 } from "../../../core/normalise.js";
 import { findCategory, findWallet, signedAmount } from "../../../core/query.js";
@@ -82,6 +83,8 @@ export function createMobileBackend(
   const invalidate = () => cache.drop("mobile:transactions");
   const rawWallets = () =>
     cache.read("mobile:wallets", () => page<WireWallet>("/api/sync/pull/account"));
+  const walletCatalog = async () =>
+    (await rawWallets()).filter((wallet) => !wallet.isDelete).map(normaliseWallet);
   const invalidateWallets = () => cache.drop("mobile:wallets");
 
   async function walletRow(id: string): Promise<WireWallet> {
@@ -118,6 +121,8 @@ export function createMobileBackend(
       const [raw, transactions] = await Promise.all([rawWallets(), rows()]);
       return walletsWithBalances(raw, transactions);
     },
+
+    walletCatalog,
 
     async categories(): Promise<Category[]> {
       const raw = await pull<RawCategory>("/api/sync/pull/category/v2");
@@ -187,7 +192,7 @@ export function createMobileBackend(
     },
 
     async addTransaction(input: NewTransaction): Promise<string> {
-      const wallet = findWallet(await backend.wallets(), input.wallet);
+      const wallet = findWallet(await walletCatalog(), input.wallet);
       const category = findCategory(await backend.categories(), input.category, wallet.id);
       const id = gid();
       await push("transaction", [
@@ -263,7 +268,7 @@ export function createMobileBackend(
 
     ...createStructure({
       push,
-      wallets: () => backend.wallets(),
+      wallets: walletCatalog,
       categories: () => backend.categories(),
       labels: () => backend.labels?.() ?? Promise.resolve([]),
     }),

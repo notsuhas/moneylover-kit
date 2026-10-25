@@ -32,7 +32,7 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
    */
   const show: Rendering = async (rows: Transaction[]) => {
     const [wallets, events, categories] = await Promise.all([
-      client.wallets(),
+      client.walletCatalog(),
       client.events(),
       client.categories(),
     ]);

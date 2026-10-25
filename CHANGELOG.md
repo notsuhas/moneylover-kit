@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+### Patch Changes
+
+- Resolve wallet names and currencies without downloading transaction history
+  during expense writes and rendering. Keep full reconciliation for transaction
+  checks and balance requests.
+
 ## 0.2.2
 
 ### Patch Changes

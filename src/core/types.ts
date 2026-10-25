@@ -209,6 +209,7 @@ export interface Backend {
   readonly can: Capabilities;
   account(): Promise<Account>;
   wallets(): Promise<Wallet[]>;
+  walletCatalog?(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
   transactions(): Promise<Transaction[]>;
   /** Events / trips. Present only where `can.events` says so. */

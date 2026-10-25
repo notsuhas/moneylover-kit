@@ -49,6 +49,7 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
   const invalidate = () =>
     cache.drop(
       "wallets",
+      "wallet-catalog",
       "categories",
       "labels",
       "events",

@@ -76,6 +76,8 @@ export interface MoneyLover {
 
   account(): ReturnType<Backend["account"]>;
   wallets(): Promise<Wallet[]>;
+  /** Wallet identities and currency, without calculating balances. */
+  walletCatalog(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
   events(): Promise<Event[]>;
   addEvent(input: NewEvent): Promise<Event>;
@@ -145,6 +147,8 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
   // The backends cache the raw lists under their own keys; these memoise the
   // normalised view on top, and a write drops both.
   const wallets = () => cache.read("wallets", () => backend.wallets());
+  const walletCatalog = () =>
+    cache.read("wallet-catalog", () => backend.walletCatalog?.() ?? backend.wallets());
   const categories = () => cache.read("categories", () => backend.categories());
   const allTransactions = () => cache.read("transactions", () => backend.transactions());
   const events = () => cache.read("events", () => backend.events?.() ?? Promise.resolve([]));
@@ -182,6 +186,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     routing,
     account: () => cache.read("account", () => backend.account()),
     wallets,
+    walletCatalog,
     categories,
     events,
     labels: () => cache.read("labels", () => backend.labels?.() ?? Promise.resolve([])),
@@ -192,7 +197,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       let scoped = await allTransactions();
 
       if (wallet) {
-        const id = findWallet(await wallets(), wallet).id;
+        const id = findWallet(await walletCatalog(), wallet).id;
         scoped = scoped.filter((t) => t.walletId === id);
       }
       if (category) {
@@ -219,7 +224,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     async addTransaction(input: NewTransaction): Promise<Transaction> {
       const time = transactionDate(input);
       const [wallet, category] = await Promise.all([
-        findWallet(await wallets(), input.wallet),
+        findWallet(await walletCatalog(), input.wallet),
         findCategory(await categories(), input.category),
       ]);
       const id = await backend.addTransaction(input);
@@ -289,7 +294,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
           `amount must be positive — \`${kind}\` already sets the direction`,
         );
       }
-      const wallet = findWallet(await wallets(), input.wallet);
+      const wallet = findWallet(await walletCatalog(), input.wallet);
       const category = lendingCategory(await categories(), kind, wallet.id);
       const amount = category.type === "expense" ? -input.amount : input.amount;
       const id = await backend.addTransaction({
@@ -333,7 +338,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         throw new MoneyLoverError("original transaction must be an active loan");
       }
       if (loan.people.length !== 1) throw new MoneyLoverError("loan must name exactly one person");
-      const allWallets = await wallets();
+      const allWallets = await walletCatalog();
       const receiving = findWallet(allWallets, input.wallet);
       const origin = findWallet(allWallets, loan.walletId);
       if (receiving.archived || receiving.currencyId !== origin.currencyId) {
@@ -385,7 +390,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     },
 
     async lending(person?: string): Promise<PersonBalance[]> {
-      const currencyOf = new Map((await wallets()).map((w) => [w.id, w.currencyId]));
+      const currencyOf = new Map((await walletCatalog()).map((w) => [w.id, w.currencyId]));
       return lendingSummary(await allTransactions(), await categories(), person, currencyOf);
     },
   };
