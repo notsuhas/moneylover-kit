@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+### Patch Changes
+
+- Round wallet balances after summing split legs, and detach obsolete loan links
+  when a collection is corrected to borrowing.
+
 ## 0.3.0
 
 ### Minor Changes

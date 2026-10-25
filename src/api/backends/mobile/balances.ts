@@ -23,9 +23,8 @@ export function walletsWithBalances(
     if (transaction.isDelete || transaction.displayDate.slice(0, 10) > today) continue;
     const wallet = byId.get(transaction.account._id);
     if (!wallet) continue;
-    const factor = 10 ** currencyInfo(wallet.currencyId).decimals;
     const signed = transaction.category.type === 1 ? transaction.amount : -transaction.amount;
-    totals.set(wallet.id, (totals.get(wallet.id) ?? 0) + Math.round(signed * factor));
+    totals.set(wallet.id, (totals.get(wallet.id) ?? 0) + signed);
   }
 
   return wallets.map((wallet) => {
@@ -33,7 +32,9 @@ export function walletsWithBalances(
     const factor = 10 ** decimals;
     return {
       ...wallet,
-      balance: { [code]: ((totals.get(wallet.id) ?? 0) / factor).toFixed(decimals) },
+      balance: {
+        [code]: (Math.round((totals.get(wallet.id) ?? 0) * factor) / factor).toFixed(decimals),
+      },
     };
   });
 }

@@ -24,7 +24,7 @@ const transaction = (
 });
 
 describe("mobile wallet balances", () => {
-  it("sums income and expense in integer minor units", () => {
+  it("sums income and expense at the wallet's display precision", () => {
     const rows = [
       transaction("inr", 100.1, 1),
       transaction("inr", 40.05, 2),
@@ -35,6 +35,22 @@ describe("mobile wallet balances", () => {
       result.map((row) => row.balance),
       [{ INR: "60.05" }, { MYR: "12.34" }],
     );
+  });
+
+  it("rounds a zero-decimal wallet after summing fractional split legs", () => {
+    const rows = [
+      transaction("jpy", 10000, 1),
+      transaction("jpy", 125.5, 2),
+      transaction("jpy", 125.5, 2),
+      transaction("jpy", 70, 2),
+    ];
+    const result = walletsWithBalances([wallet("jpy", 6)], rows);
+    assert.deepEqual(result[0]?.balance, { JPY: "9679" });
+    const grouped = walletsWithBalances(
+      [wallet("jpy", 6)],
+      [transaction("jpy", 10000, 1), transaction("jpy", 251, 2), transaction("jpy", 70, 2)],
+    );
+    assert.deepEqual(result, grouped);
   });
 
   it("excludes future, deleted and soft-deleted-wallet rows", () => {
