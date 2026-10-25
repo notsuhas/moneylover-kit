@@ -240,7 +240,6 @@ export function createMobileBackend(
         ? findCategory(await backend.categories(), patch.category, row.account._id)
         : null;
       const item = itemFrom(row, category?.id ?? row.category._id, 2);
-      if (category?.metadata === "IS_DEBT") delete item.pi;
       const type = category?.type ?? kind(row.category.type);
       if (patch.amount !== undefined) item.a = signedAmount(patch.amount, type);
       if (patch.note !== undefined) item.n = patch.note;

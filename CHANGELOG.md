@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+### Patch Changes
+
+- Preserve native loan links during category edits. The upstream API retains an
+  existing parent when the field is omitted; detaching it requires replacing the
+  linked record.
+
 ## 0.3.1
 
 ### Patch Changes
