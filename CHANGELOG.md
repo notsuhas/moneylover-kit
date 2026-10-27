@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- Collections and repayments now require a native link to the original loan or
+  debt, so offsets close the individual records in Money Lover. Single writes,
+  receipt batches and settlement edits validate the person, currency and
+  remaining balance before writing. Pass parentId (or --parent-id in the CLI),
+  and split payments across original records when necessary.
+
+## 0.3.2
+
+### Patch Changes
+
+- Preserve native loan links during category edits. The upstream API retains an
+  existing parent when the field is omitted; detaching it requires replacing the
+  linked record.
+
+## 0.3.1
+
+### Patch Changes
+
+- Round wallet balances after summing split legs, and detach obsolete loan links
+  when a collection is corrected to borrowing.
+
 ## 0.3.0
 
 ### Minor Changes

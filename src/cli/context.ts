@@ -29,6 +29,7 @@ export interface Flags {
   icon?: string;
   currency?: string;
   parent?: string;
+  "parent-id"?: string;
   type?: string;
   "all-wallets"?: boolean;
 }

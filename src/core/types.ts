@@ -65,14 +65,14 @@ export interface Transaction {
   excludeReport: boolean;
   /** The other leg of a transfer, when there is one. */
   relatedId?: string;
-  /** Original loan this collection pays back. */
+  /** Original loan or debt this settlement pays back. */
   parentId?: string;
   /** Reminder timestamp, in whatever units Money Lover stored it. 0 or absent means none. */
   remindAt?: number;
 }
 
 export interface NewTransaction {
-  /** Original loan this collection pays back; mobile only. */
+  /** Original loan or debt this settlement pays back; mobile only. */
   parentId?: string;
   /** Wallet name or id. */
   wallet: string;

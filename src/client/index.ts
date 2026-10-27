@@ -9,6 +9,7 @@ import type { AuthOptions } from "../api/auth.js";
 import { createMobileBackend } from "../api/backends/mobile/index.js";
 import { createWebBackend } from "../api/backends/web/index.js";
 import { type Cache, createCache } from "../core/cache.js";
+import { validateCollections } from "../core/collection.js";
 import { transactionDate } from "../core/dates.js";
 import {
   type ILoanCollectionInput,
@@ -200,6 +201,58 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     return row;
   }
 
+  async function validateSettlements(
+    inputs: NewTransaction[],
+    rows?: Transaction[],
+  ): Promise<void> {
+    const [cats, allWallets] = await Promise.all([categories(), walletCatalog()]);
+    if (
+      !inputs.some(
+        (input) =>
+          input.parentId ||
+          ["IS_DEBT_COLLECTION", "IS_REPAYMENT"].includes(
+            findCategory(cats, input.category, findWallet(allWallets, input.wallet).id).metadata ??
+              "",
+          ),
+      )
+    )
+      return;
+    if (backend.name !== "mobile") throw new MoneyLoverError("loan/debt linking requires mobile");
+    if (!rows) forgetTransactions();
+    validateCollections(inputs, rows ?? (await allTransactions()), cats, await walletCatalog());
+  }
+
+  async function recordLending(
+    kind: LendingKind,
+    input: LendingInput,
+    rows?: Transaction[],
+  ): Promise<Transaction> {
+    if (!Number.isFinite(input.amount) || input.amount <= 0)
+      throw new MoneyLoverError("amount must be positive and finite");
+    if ((kind === "collect" || kind === "repay") && !input.parentId)
+      throw new MoneyLoverError("collect/repay require parentId; split across original records");
+    if ((kind === "lend" || kind === "borrow") && input.parentId)
+      throw new MoneyLoverError("Only collect/repay accept parentId");
+    const wallet = findWallet(await walletCatalog(), input.wallet);
+    const category = lendingCategory(await categories(), kind, wallet.id);
+    const entry: NewTransaction = {
+      wallet: wallet.id,
+      category: category.id,
+      amount: category.type === "expense" ? -input.amount : input.amount,
+      people: [input.person],
+      ...(input.parentId ? { parentId: input.parentId, excludeReport: true } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.date !== undefined ? { date: input.date } : {}),
+      ...(input.dateTime !== undefined ? { dateTime: input.dateTime } : {}),
+      ...(input.eventId !== undefined ? { eventId: input.eventId } : {}),
+    };
+    transactionDate(entry);
+    await validateSettlements([entry], rows);
+    return described(
+      createdTransaction(await backend.addTransaction(entry), entry, wallet, category),
+    );
+  }
+
   const structure = createStructureApi({ backend, cache, wallets, categories });
 
   return {
@@ -250,6 +303,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
         categories().then((all) => findCategory(all, input.category)),
       ]);
       transactionDate(input);
+      await validateSettlements([input]);
       const id = await backend.addTransaction(input);
       return described(createdTransaction(id, input, wallet, category));
     },
@@ -264,6 +318,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
           throw new MoneyLoverError("Amount sign disagrees with category");
         return { wallet, category };
       });
+      await validateSettlements(inputs);
       let ids: string[];
       if (backend.addTransactions) ids = await backend.addTransactions(inputs);
       else {
@@ -283,6 +338,41 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       const before = await transaction(id);
       const category = patch.category ? findCategory(await categories(), patch.category) : null;
       const time = transactionDate(patch, before.dateTime ?? before.date);
+      await validateSettlements(
+        [
+          {
+            wallet: before.walletId,
+            category: patch.category ?? before.categoryId,
+            amount: patch.amount ?? before.amount,
+            people: patch.people ?? before.people,
+            ...(before.parentId ? { parentId: before.parentId } : {}),
+          },
+        ],
+        (await allTransactions()).filter((row) => row.id !== id),
+      );
+      const children = (await allTransactions()).filter((row) => row.parentId === id);
+      if (children.length) {
+        const childIds = new Set(children.map((row) => row.id));
+        const prospective = {
+          ...before,
+          amount: patch.amount ?? before.amount,
+          people: patch.people ?? before.people,
+          ...(category ? { categoryId: category.id, type: category.type } : {}),
+        };
+        await validateSettlements(
+          children.map((row) => ({
+            wallet: row.walletId,
+            category: row.categoryId,
+            amount: row.amount,
+            people: row.people,
+            parentId: id,
+          })),
+          [
+            ...(await allTransactions()).filter((row) => row.id !== id && !childIds.has(row.id)),
+            prospective,
+          ],
+        );
+      }
       await backend.editTransaction(id, patch);
       const { dateTime: _previousTime, ...unchanged } = before;
       return described({
@@ -322,106 +412,26 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       return plan.length;
     },
 
-    async recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction> {
-      const time = transactionDate(input);
-      if (input.amount <= 0) {
-        throw new MoneyLoverError(
-          `amount must be positive — \`${kind}\` already sets the direction`,
-        );
-      }
-      const wallet = findWallet(await walletCatalog(), input.wallet);
-      const category = lendingCategory(await categories(), kind, wallet.id);
-      const amount = category.type === "expense" ? -input.amount : input.amount;
-      const id = await backend.addTransaction({
-        wallet: wallet.id,
-        category: category.id,
-        amount,
-        people: [input.person],
-        ...(input.note !== undefined ? { note: input.note } : {}),
-        ...(input.date !== undefined ? { date: input.date } : {}),
-        ...(input.dateTime !== undefined ? { dateTime: input.dateTime } : {}),
-        ...(input.eventId !== undefined ? { eventId: input.eventId } : {}),
-      });
-      return described({
-        id,
-        ...time,
-        amount,
-        note: input.note ?? "",
-        walletId: wallet.id,
-        categoryId: category.id,
-        categoryName: category.name,
-        type: category.type,
-        people: [input.person],
-        eventIds: input.eventId ? [input.eventId] : [],
-        excludeReport: false,
-      });
-    },
+    recordLending,
 
     async collectLoan(loanId: string, input: ILoanCollectionInput): Promise<Transaction> {
-      if (backend.name !== "mobile") throw new MoneyLoverError("loan linking requires mobile");
-      if (!Number.isFinite(input.amount) || input.amount <= 0) {
-        throw new MoneyLoverError("collection amount must be positive and finite");
-      }
-      if (Math.round(input.amount * 100) === 0)
-        throw new MoneyLoverError("collection is below one minor unit");
       forgetTransactions();
-      const time = transactionDate(input);
       const rows = await allTransactions();
       const loan = rows.find((row) => row.id === loanId);
-      const cats = await categories();
-      if (!loan || categoryIndex(cats)(loan)?.metadata !== "IS_LOAN" || loan.amount >= 0) {
+      if (!loan || categoryIndex(await categories())(loan)?.metadata !== "IS_LOAN")
         throw new MoneyLoverError("original transaction must be an active loan");
-      }
-      if (loan.people.length !== 1) throw new MoneyLoverError("loan must name exactly one person");
-      const allWallets = await walletCatalog();
-      const receiving = findWallet(allWallets, input.wallet);
-      const origin = findWallet(allWallets, loan.walletId);
-      if (receiving.archived || receiving.currencyId !== origin.currencyId) {
-        throw new MoneyLoverError("receiving wallet must be active and use the loan currency");
-      }
-      const linked = rows.filter((row) => row.parentId === loanId);
-      if (
-        linked.some(
-          (row) =>
-            categoryIndex(cats)(row)?.metadata !== "IS_DEBT_COLLECTION" ||
-            row.amount <= 0 ||
-            findWallet(allWallets, row.walletId).currencyId !== origin.currencyId,
-        )
-      ) {
-        throw new MoneyLoverError("loan has an unexpected linked transaction");
-      }
-      const collected = linked.reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
-      if (Math.round(input.amount * 100) > Math.round(-loan.amount * 100) - collected) {
-        throw new MoneyLoverError("collection exceeds the loan's remaining amount");
-      }
-      const category = lendingCategory(cats, "collect", receiving.id);
-      const eventId = input.eventId ?? (loan.eventIds.length === 1 ? loan.eventIds[0] : undefined);
-      const id = await backend.addTransaction({
-        wallet: receiving.id,
-        category: category.id,
-        amount: input.amount,
-        parentId: loan.id,
-        people: loan.people,
-        excludeReport: true,
-        eventId,
-        note: input.note,
-        date: input.date,
-        ...(input.dateTime !== undefined ? { dateTime: input.dateTime } : {}),
-      });
-      return described({
-        id,
-        ...time,
-        amount: input.amount,
-        note: input.note ?? "",
-        walletId: receiving.id,
-        categoryId: category.id,
-        categoryName: category.name,
-        type: "income",
-        people: loan.people,
-        eventIds: eventId ? [eventId] : [],
-        excludeReport: true,
-        parentId: loan.id,
-      });
+      return recordLending(
+        "collect",
+        {
+          ...input,
+          parentId: loanId,
+          person: loan.people[0] ?? "",
+          ...(input.eventId === undefined && loan.eventIds.length === 1
+            ? { eventId: loan.eventIds[0] }
+            : {}),
+        },
+        rows,
+      );
     },
 
     async lending(person?: string): Promise<PersonBalance[]> {

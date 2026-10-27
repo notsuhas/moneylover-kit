@@ -47,6 +47,7 @@ function fakeBackend(seed: Transaction[] = [], name: Backend["name"] = "web") {
           walletId: input.wallet,
           categoryId: input.category,
           people: input.people ?? [],
+          ...(input.parentId ? { parentId: input.parentId } : {}),
         }),
       );
       return id;
@@ -234,12 +235,15 @@ describe("createClient — lending", () => {
     assert.deepEqual(input?.people, ["Sam"]);
   });
 
-  it("records a collection as income", async () => {
+  it("rejects unlinked collections and repayments before writing", async () => {
     const fake = fakeBackend();
     const client = createClient({ use: fake.backend });
-    await client.recordLending("collect", { person: "Sam", amount: 3000, wallet: "Current" });
-    assert.equal(fake.lastAdd()?.amount, 3000);
-    assert.equal(fake.lastAdd()?.category, "collect");
+    for (const kind of ["collect", "repay"] as const)
+      await assert.rejects(
+        () => client.recordLending(kind, { person: "Sam", amount: 3000, wallet: "Current" }),
+        /parentId/,
+      );
+    assert.equal(fake.calls.add, 0);
   });
 
   it("insists the amount is positive, because the verb sets the direction", async () => {
@@ -361,6 +365,7 @@ describe("collectLoan", () => {
         note: "Printouts.",
       });
       assert.equal(row.parentId, "loan-id");
+      assert.equal(fake.calls.transactions, 1, "collection validation reuses its fresh snapshot");
       assert.deepEqual(fake.rows.get("loan-id"), loan);
     });
   }
@@ -418,7 +423,30 @@ describe("collectLoan", () => {
           amount: 1,
           wallet: "Savings",
         }),
-      /active loan/,
+      /no transaction|active loan/,
     );
   });
+});
+
+it("rejects principal edits that invalidate existing native settlements", async () => {
+  const principal = aTransaction({
+    id: "principal",
+    categoryId: "loan",
+    amount: -100,
+    people: ["Sam"],
+  });
+  const child = aTransaction({
+    id: "paid",
+    categoryId: "collect",
+    amount: 60,
+    parentId: principal.id,
+    people: ["Sam"],
+  });
+  const fake = fakeBackend([principal, child], "mobile");
+  const client = createClient({ use: fake.backend });
+  for (const patch of [{ amount: -10 }, { people: ["Other"] }, { category: "c1" }])
+    await assert.rejects(() => client.editTransaction(principal.id, patch));
+  assert.equal(fake.calls.edit, 0);
+  await client.editTransaction(principal.id, { note: "Corrected description" });
+  assert.equal(fake.calls.edit, 1);
 });

@@ -55,6 +55,11 @@ export function registerTransactionTools(
         date: DATE.optional().describe("Defaults to today"),
         dateTime: DATE_TIME.optional(),
         people: z.array(z.string()).optional().describe("Who it was with"),
+        parentId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Required for collection/repayment: original loan/debt ID"),
         eventId: z.string().min(1).optional().describe("Event ID from list_events"),
         excludeReport: z.boolean().optional().describe("Keep it out of spending reports"),
       },

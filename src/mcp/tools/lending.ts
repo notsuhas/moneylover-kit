@@ -37,7 +37,7 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
       description:
         "Record money lent, collected, borrowed or repaid, against Money Lover's own " +
         "lending categories so its debt tracking sees it. The amount is always positive — " +
-        "the kind sets the direction. The wallet is per leg, so lending from one account " +
+        "the kind sets the direction. Collections and repayments require parentId and are linked to the original loan/debt; split across originals. The wallet is per leg, so lending from one account " +
         "and collecting into another is expected and reconciles by person.",
       inputSchema: {
         kind: z
@@ -46,6 +46,11 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
             "lend: you gave money out. collect: it came back. " +
               "borrow: you took money. repay: you paid it back.",
           ),
+        parentId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Required for collect/repay: original loan/debt ID"),
         person: z.string().describe("Who the money went to or came from"),
         amount: z.number().positive().describe("Positive; the kind sets the direction"),
         wallet: z.string().describe("Wallet this leg moved through"),

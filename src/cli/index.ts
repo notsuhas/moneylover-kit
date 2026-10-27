@@ -41,6 +41,7 @@ const options = {
   icon: { type: "string" },
   currency: { type: "string" },
   parent: { type: "string" },
+  "parent-id": { type: "string" },
   type: { type: "string" },
   "all-wallets": { type: "boolean" },
 } as const;

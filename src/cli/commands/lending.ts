@@ -18,7 +18,12 @@ export const record =
       person,
       wallet,
       amount,
-      ...defined({ note: flags.note, dateTime: flags["date-time"], date: flags.date }),
+      ...defined({
+        parentId: flags["parent-id"],
+        note: flags.note,
+        dateTime: flags["date-time"],
+        date: flags.date,
+      }),
     });
     const names = await walletNames();
     show(row, () => {

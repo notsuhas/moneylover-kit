@@ -189,3 +189,22 @@ web creation or editing of linked collections fails instead of dropping the link
 Use `list_events` to find an existing event ID. Pass `eventId` to `add_transaction`,
 `edit_transaction` or `record_lending`. Omit it on edits to preserve existing tags;
 pass `null` to clear them.
+
+### Native settlement links
+
+`record_lending` with `kind=collect` or `kind=repay` requires `parentId`, the
+original loan or debt ID. `record_transactions.entries` and `add_transaction`
+accept the same field. Search for original records first; returned settlements
+include `parentId` and the existing `loanId` alias.
+
+Each settlement must name the original person, use the original currency and
+correct direction, and fit within the remaining balance. Split across original
+records when a payment covers several loans or debts. Receipt batches check the
+combined amount before writing. Collections and repayments without links are
+rejected, including attempts to recategorize ordinary entries into settlements.
+`record_lending` and receipt settlement entries are excluded from spending reports.
+Use `record_transactions` with a stable `receiptId` for retry protection; ordinary
+single writes remain non-idempotent and must be reconciled after a timeout.
+
+This prevents new unlinked offsets through the MCP. It does not automatically
+net future loans against debts, convert currencies, or repair historical records.
