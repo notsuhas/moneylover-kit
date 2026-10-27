@@ -84,7 +84,7 @@ This wraps them, so the app's debt view sees what you record:
 
 ```bash
 moneylover lend    --person Sam --amount 5000 --wallet Savings
-moneylover collect --person Sam --amount 3000 --wallet Current
+moneylover collect --person Sam --amount 3000 --wallet Current --parent-id ORIGINAL_LOAN_ID
 moneylover lending
 ```
 
@@ -96,7 +96,10 @@ Jordan                        800.00      800.00          0.00      450.00
 
 The wallet is per leg, so lending from one account and being paid back into a
 different one is normal — the balance is tracked against the **person**, not the
-account. `borrow` and `repay` are the mirror for money you owe.
+account. `borrow` and `repay` are the mirror for money you owe. Collections and
+repayments require `--parent-id` pointing to the original loan or debt. Split a
+payment across originals when necessary; standalone offsets are rejected because
+they leave the app’s original records open.
 
 ## MCP server
 

@@ -1,6 +1,6 @@
 import { currencyInfo } from "./currencies.js";
 import { lendingCategory } from "./lending.js";
-import { categoryIndex, findWallet } from "./query.js";
+import { categoryIndex, findCategory, findWallet } from "./query.js";
 import type { Category, NewTransaction, Transaction, Wallet } from "./types.js";
 
 export function validateCollections(
@@ -10,58 +10,67 @@ export function validateCollections(
   wallets: Wallet[],
 ): void {
   const categoryOf = categoryIndex(categories);
-  for (const loanId of new Set(
-    inputs.flatMap((input) => (input.parentId ? [input.parentId] : [])),
-  )) {
-    const loan = rows.find((row) => row.id === loanId);
+  const settlements = inputs.filter((input) => {
+    const category = findCategory(categories, input.category, findWallet(wallets, input.wallet).id);
+    const settlement = ["IS_DEBT_COLLECTION", "IS_REPAYMENT"].includes(category.metadata ?? "");
+    if (settlement && !input.parentId)
+      throw new Error("Collections and repayments require parentId; split across original records");
+    if (input.parentId && !settlement)
+      throw new Error("Only collections and repayments can link to an original loan or debt");
+    return settlement;
+  });
+  for (const parentId of new Set(settlements.map((input) => input.parentId))) {
+    const original = rows.find((row) => row.id === parentId);
+    const kind = original ? categoryOf(original)?.metadata : undefined;
+    const loan = kind === "IS_LOAN";
     if (
-      !loan ||
-      loan.amount >= 0 ||
-      categoryOf(loan)?.metadata !== "IS_LOAN" ||
-      loan.people.length !== 1
+      !original ||
+      (!loan && kind !== "IS_DEBT") ||
+      (loan ? original.amount >= 0 : original.amount <= 0) ||
+      original.people.length !== 1
     )
-      throw new Error("Original transaction must be a single-person loan");
-    const currencyId = findWallet(wallets, loan.walletId).currencyId;
+      throw new Error("Original transaction must be an active loan or debt naming one person");
+    const currencyId = findWallet(wallets, original.walletId).currencyId;
     const factor = 10 ** currencyInfo(currencyId).decimals;
-    const linked = rows.filter((row) => row.parentId === loanId);
+    const metadata = loan ? "IS_DEBT_COLLECTION" : "IS_REPAYMENT";
+    const linked = rows.filter((row) => row.parentId === parentId);
     if (
       linked.some(
         (row) =>
-          row.amount <= 0 ||
-          categoryOf(row)?.metadata !== "IS_DEBT_COLLECTION" ||
+          (loan ? row.amount <= 0 : row.amount >= 0) ||
+          categoryOf(row)?.metadata !== metadata ||
           findWallet(wallets, row.walletId).currencyId !== currencyId,
       )
     )
-      throw new Error("Loan has an unexpected linked collection");
-    const requested = inputs.filter(
-      (input) =>
-        input.parentId === loanId &&
-        !linked.some(
-          (row) =>
-            row.walletId === input.wallet &&
-            row.categoryId === input.category &&
-            row.amount === input.amount &&
-            row.note === input.note &&
-            Date.parse(row.dateTime ?? "") === Date.parse(input.dateTime ?? ""),
-        ),
-    );
-    if (
-      requested.some(
-        (input) =>
-          input.amount <= 0 ||
-          findWallet(wallets, input.wallet).currencyId !== currencyId ||
-          !categories.some(
-            (category) =>
-              category.id === input.category && category.metadata === "IS_DEBT_COLLECTION",
-          ),
+      throw new Error("Original has an unexpected linked settlement");
+    const requested = settlements.filter((input) => input.parentId === parentId);
+    for (const input of requested) {
+      const wallet = findWallet(wallets, input.wallet);
+      const category = findCategory(categories, input.category, wallet.id);
+      const scaled = Math.abs(input.amount) * factor;
+      if (
+        !Number.isFinite(input.amount) ||
+        (loan ? input.amount <= 0 : input.amount >= 0) ||
+        Math.round(scaled) === 0 ||
+        Math.abs(Math.round(scaled) - scaled) > 1e-8 ||
+        wallet.archived ||
+        wallet.currencyId !== currencyId ||
+        category.metadata !== metadata ||
+        input.people?.length !== 1 ||
+        input.people[0] !== original.people[0]
       )
-    )
-      throw new Error("Collection must use the original loan currency and collection category");
+        throw new Error(
+          "Settlement must match original person, currency, direction and currency precision in an active wallet",
+        );
+    }
     const available =
-      Math.round(-loan.amount * factor) -
-      linked.reduce((sum, row) => sum + Math.round(row.amount * factor), 0);
-    if (requested.reduce((sum, input) => sum + Math.round(input.amount * factor), 0) > available)
-      throw new Error("Collection exceeds the loan's remaining amount");
+      Math.round(Math.abs(original.amount) * factor) -
+      linked.reduce((sum, row) => sum + Math.round(Math.abs(row.amount) * factor), 0);
+    if (
+      requested.reduce((sum, input) => sum + Math.round(Math.abs(input.amount) * factor), 0) >
+      available
+    )
+      throw new Error("Settlement exceeds the original remaining amount");
   }
 }
 

@@ -67,6 +67,7 @@ test("cross-currency collection preserves loan accounting, actual cash and exclu
     walletId: "inr",
     categoryId: "collect",
     amount: 400,
+    people: ["Bob"],
     parentId: loan.id,
   });
   assert.throws(
@@ -91,4 +92,37 @@ test("cross-currency collection preserves loan accounting, actual cash and exclu
       ),
     /transfer category/,
   );
+});
+
+test("repayments validate combined remaining debt, person and yen precision before any write", () => {
+  const cats = [
+    aCategory({ id: "debt", name: "Debt", type: "income", metadata: "IS_DEBT", walletId: "jpy" }),
+    aCategory({ id: "repay", name: "Repayment", metadata: "IS_REPAYMENT", walletId: "jpy" }),
+  ];
+  const debt = aTransaction({
+    id: "debt-1",
+    walletId: "jpy",
+    categoryId: "debt",
+    amount: 100,
+    people: ["Bob"],
+  });
+  const entry = {
+    wallet: "jpy",
+    category: "repay",
+    parentId: debt.id,
+    amount: -60,
+    people: ["Bob"],
+  };
+  validateCollections([entry], [debt], cats, wallets);
+  assert.throws(
+    () => validateCollections([entry, { ...entry, amount: -41 }], [debt], cats, wallets),
+    /exceeds/,
+  );
+  for (const patch of [
+    { amount: -0.5 },
+    { people: ["Other"] },
+    { wallet: "inr" },
+    { parentId: undefined },
+  ])
+    assert.throws(() => validateCollections([{ ...entry, ...patch }], [debt], cats, wallets));
 });

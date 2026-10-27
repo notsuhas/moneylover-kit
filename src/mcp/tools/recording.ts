@@ -98,7 +98,6 @@ export function registerRecordingTool(
             client.walletCatalog(),
           ]);
           const entries = crossCurrencyCollection(input, rows, categories, wallets);
-          validateCollections(entries, rows, categories, wallets);
           const saved = await record(receiptId, entries);
           const balances = await client.wallets();
           return json({
@@ -127,6 +126,11 @@ export function registerRecordingTool(
               category: z.string().optional(),
               kind: z.enum(["lend", "borrow", "collect", "repay"]).optional(),
               person: z.string().min(1).optional(),
+              parentId: z
+                .string()
+                .min(1)
+                .optional()
+                .describe("Required for collect/repay: original loan/debt ID"),
               amount: z
                 .number()
                 .finite()
@@ -171,7 +175,7 @@ export function registerRecordingTool(
               amount,
               category: category.id,
               people: entry.kind ? [entry.person ?? ""] : [...(entry.people ?? [])].sort(),
-              excludeReport: Boolean(entry.excludeReport),
+              excludeReport: Boolean(entry.parentId || entry.excludeReport),
             };
           });
           const keys = inputs.map((input) =>

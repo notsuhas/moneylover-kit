@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- Collections and repayments now require a native link to the original loan or
+  debt, so offsets close the individual records in Money Lover. Single writes,
+  receipt batches and settlement edits validate the person, currency and
+  remaining balance before writing. Pass parentId (or --parent-id in the CLI),
+  and split payments across original records when necessary.
+
 ## 0.3.2
 
 ### Patch Changes

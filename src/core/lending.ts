@@ -18,6 +18,8 @@ import { MoneyLoverError } from "./types.js";
 export type LendingKind = "lend" | "collect" | "borrow" | "repay";
 
 export interface LendingInput {
+  /** Required for collect/repay: the original loan/debt ID. */
+  parentId?: string;
   /** Who the money went to or came from. */
   person: string;
   /** Always positive: the direction comes from the lending kind. */

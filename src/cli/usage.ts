@@ -29,9 +29,9 @@ Transactions
 
 Lending
   moneylover lend    --person P --amount N --wallet W    money you handed over
-  moneylover collect --person P --amount N --wallet W    money that came back
+  moneylover collect --person P --amount N --wallet W --parent-id LOAN    money that came back
   moneylover borrow  --person P --amount N --wallet W    money you took
-  moneylover repay   --person P --amount N --wallet W    money you paid back
+  moneylover repay   --person P --amount N --wallet W --parent-id DEBT    money you paid back
   moneylover lending [--person P]                        who owes what, net
 
   Amounts here are always positive — the verb sets the direction. The wallet is
