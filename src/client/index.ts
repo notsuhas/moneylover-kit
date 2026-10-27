@@ -222,7 +222,11 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     validateCollections(inputs, rows ?? (await allTransactions()), cats, await walletCatalog());
   }
 
-  async function recordLending(kind: LendingKind, input: LendingInput): Promise<Transaction> {
+  async function recordLending(
+    kind: LendingKind,
+    input: LendingInput,
+    rows?: Transaction[],
+  ): Promise<Transaction> {
     if (!Number.isFinite(input.amount) || input.amount <= 0)
       throw new MoneyLoverError("amount must be positive and finite");
     if ((kind === "collect" || kind === "repay") && !input.parentId)
@@ -243,7 +247,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       ...(input.eventId !== undefined ? { eventId: input.eventId } : {}),
     };
     transactionDate(entry);
-    await validateSettlements([entry]);
+    await validateSettlements([entry], rows);
     return described(
       createdTransaction(await backend.addTransaction(entry), entry, wallet, category),
     );
@@ -412,17 +416,22 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
 
     async collectLoan(loanId: string, input: ILoanCollectionInput): Promise<Transaction> {
       forgetTransactions();
-      const loan = await transaction(loanId);
-      if (categoryIndex(await categories())(loan)?.metadata !== "IS_LOAN")
+      const rows = await allTransactions();
+      const loan = rows.find((row) => row.id === loanId);
+      if (!loan || categoryIndex(await categories())(loan)?.metadata !== "IS_LOAN")
         throw new MoneyLoverError("original transaction must be an active loan");
-      return recordLending("collect", {
-        ...input,
-        parentId: loanId,
-        person: loan.people[0] ?? "",
-        ...(input.eventId === undefined && loan.eventIds.length === 1
-          ? { eventId: loan.eventIds[0] }
-          : {}),
-      });
+      return recordLending(
+        "collect",
+        {
+          ...input,
+          parentId: loanId,
+          person: loan.people[0] ?? "",
+          ...(input.eventId === undefined && loan.eventIds.length === 1
+            ? { eventId: loan.eventIds[0] }
+            : {}),
+        },
+        rows,
+      );
     },
 
     async lending(person?: string): Promise<PersonBalance[]> {

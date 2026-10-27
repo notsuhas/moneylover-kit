@@ -365,6 +365,7 @@ describe("collectLoan", () => {
         note: "Printouts.",
       });
       assert.equal(row.parentId, "loan-id");
+      assert.equal(fake.calls.transactions, 1, "collection validation reuses its fresh snapshot");
       assert.deepEqual(fake.rows.get("loan-id"), loan);
     });
   }
