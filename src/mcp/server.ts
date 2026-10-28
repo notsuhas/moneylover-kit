@@ -47,12 +47,23 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
     {
       title: "Get saved transactions by ID",
       description:
-        "Return only the requested saved records, using one fresh reconciliation. Money Lover still downloads full history internally. Prefer record_transactions for new receipts; its verified response needs no extra lookup.",
-      inputSchema: { ids: z.array(z.string().min(1)).min(1).max(50) },
+        "Return only the requested saved records, using one fresh reconciliation. Pass wallet when known to refresh only that wallet; omitting wallet reconciles the whole account. Prefer record_transactions for new receipts; its verified response needs no extra lookup.",
+      inputSchema: {
+        ids: z.array(z.string().min(1)).min(1).max(50),
+        wallet: z.string().optional().describe("Payment wallet name or ID, when known"),
+      },
     },
-    async ({ ids }) =>
+    async ({ ids, wallet }) =>
       client.withFreshReads(async () => {
-        const rows = await Promise.all(ids.map((id) => client.transaction(id)));
+        let rows: Transaction[];
+        if (wallet) {
+          const scoped = await client.transactions({ wallet });
+          rows = ids.map((id) => {
+            const row = scoped.find((candidate) => candidate.id === id);
+            if (!row) throw new Error(`No transaction ${id} in the requested wallet`);
+            return row;
+          });
+        } else rows = await Promise.all(ids.map((id) => client.transaction(id)));
         return json({ transactions: await show(rows) });
       }),
   );

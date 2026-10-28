@@ -19,6 +19,7 @@ export interface PullResult<T> {
 }
 
 export interface PullOptions<T> {
+  accountId?: string;
   skip?: number;
   onPage?: (rows: T[], state: { nextSkip: number; timestamp: number }) => void | Promise<void>;
 }
@@ -55,8 +56,9 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
     });
   }
 
-  const window = (lastUpdate: number, skip: number) => ({
+  const window = (lastUpdate: number, skip: number, accountId?: string) => ({
     last_update: lastUpdate,
+    ...(accountId ? { account_id: accountId } : {}),
     skip,
     limit: PAGE,
     av: AV,
@@ -81,7 +83,7 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
         message?: string;
         data?: T[];
         timestamp?: number;
-      }>(path, window(lastUpdate, skip));
+      }>(path, window(lastUpdate, skip, options.accountId));
       if (response.status === false) {
         throw new MoneyLoverError(
           response.message ?? `${path} pull failed`,

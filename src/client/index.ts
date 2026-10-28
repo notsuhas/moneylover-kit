@@ -76,7 +76,7 @@ export interface MoneyLover {
   readonly routing: Record<string, string>;
 
   account(): ReturnType<Backend["account"]>;
-  wallets(): Promise<Wallet[]>;
+  wallets(walletIds?: string[]): Promise<Wallet[]>;
   /** Wallet identities and currency, without calculating balances. */
   walletCatalog(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
@@ -170,16 +170,51 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
 
   // The backends cache the raw lists under their own keys; these memoise the
   // normalised view on top, and a write drops both.
-  const wallets = () => cache.read("wallets", () => backend.wallets());
+  const walletBalanceKeys = new Set<string>();
+  const walletTransactionKeys = new Set<string>();
+  const wallets = (walletIds?: string[]) => {
+    if (!walletIds) return cache.read("wallets", () => backend.wallets());
+    const ids = [...new Set(walletIds)].sort();
+    if (!ids.length) return Promise.resolve([]);
+    const key = `wallets:${JSON.stringify(ids)}`;
+    walletBalanceKeys.add(key);
+    return cache.read(key, async () =>
+      (await backend.wallets(ids)).filter((wallet) => ids.includes(wallet.id)),
+    );
+  };
   const walletCatalog = () =>
     cache.read("wallet-catalog", () => backend.walletCatalog?.() ?? backend.wallets());
   const categories = () => cache.read("categories", () => backend.categories());
   const allTransactions = () => cache.read("transactions", () => backend.transactions());
+  const walletTransactions = (walletId: string) => {
+    const key = `transactions:wallet:${walletId}`;
+    walletTransactionKeys.add(key);
+    return cache.read(key, () =>
+      backend.transactionsInWallet
+        ? backend.transactionsInWallet(walletId)
+        : allTransactions().then((rows) => rows.filter((row) => row.walletId === walletId)),
+    );
+  };
   const events = () => cache.read("events", () => backend.events?.() ?? Promise.resolve([]));
 
   /** A transaction write invalidates the normalised view and both raw lists. */
   const forgetTransactions = () =>
-    cache.drop("transactions", "web:transactions", "mobile:transactions");
+    cache.drop(
+      "transactions",
+      "web:transactions",
+      "mobile:transactions",
+      "wallets",
+      ...walletBalanceKeys,
+      ...walletTransactionKeys,
+    );
+
+  async function attemptWrite<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } finally {
+      forgetTransactions();
+    }
+  }
 
   async function transaction(id: string): Promise<Transaction> {
     const row = (await allTransactions()).find((t) => t.id === id);
@@ -187,15 +222,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     return row;
   }
 
-  /**
-   * Describe a written row without reading it back.
-   *
-   * Reading it back would be more honest, but there is no get-by-id on either
-   * API — the only read is the whole account — so a re-read costs 10-18s and
-   * pushed every write past a 30s gateway timeout. The push already succeeded
-   * or threw, so the fields are known; this reports them and drops the cache
-   * so the next read is fresh.
-   */
+  /** Return acknowledged input and invalidate reads; receipt tools perform server readback. */
   function described(row: Transaction): Transaction {
     forgetTransactions();
     return row;
@@ -249,11 +276,22 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     transactionDate(entry);
     await validateSettlements([entry], rows);
     return described(
-      createdTransaction(await backend.addTransaction(entry), entry, wallet, category),
+      createdTransaction(
+        await attemptWrite(() => backend.addTransaction(entry)),
+        entry,
+        wallet,
+        category,
+      ),
     );
   }
 
-  const structure = createStructureApi({ backend, cache, wallets, categories });
+  const structure = createStructureApi({
+    backend,
+    cache,
+    wallets,
+    categories,
+    invalidateTransactions: forgetTransactions,
+  });
 
   return {
     withFreshReads: cache.scope,
@@ -270,12 +308,8 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
 
     async transactions(query: TransactionQuery = {}): Promise<Transaction[]> {
       const { wallet, category, ...rest } = query;
-      let scoped = await allTransactions();
-
-      if (wallet) {
-        const id = findWallet(await walletCatalog(), wallet).id;
-        scoped = scoped.filter((t) => t.walletId === id);
-      }
+      const walletId = wallet ? findWallet(await walletCatalog(), wallet).id : undefined;
+      let scoped = walletId ? await walletTransactions(walletId) : await allTransactions();
       if (category) {
         const all = await categories();
         const wanted = new Set(
@@ -304,7 +338,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       ]);
       transactionDate(input);
       await validateSettlements([input]);
-      const id = await backend.addTransaction(input);
+      const id = await attemptWrite(() => backend.addTransaction(input));
       return described(createdTransaction(id, input, wallet, category));
     },
 
@@ -320,10 +354,12 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       });
       await validateSettlements(inputs);
       let ids: string[];
-      if (backend.addTransactions) ids = await backend.addTransactions(inputs);
+      const batch = backend.addTransactions;
+      if (batch) ids = await attemptWrite(() => batch.call(backend, inputs));
       else {
         ids = [];
-        for (const input of inputs) ids.push(await backend.addTransaction(input));
+        for (const input of inputs)
+          ids.push(await attemptWrite(() => backend.addTransaction(input)));
       }
       if (ids.length !== inputs.length) throw new MoneyLoverError("Incomplete transaction batch");
       return inputs.map((input, index) => {
@@ -373,7 +409,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
           ],
         );
       }
-      await backend.editTransaction(id, patch);
+      await attemptWrite(() => backend.editTransaction(id, patch));
       const { dateTime: _previousTime, ...unchanged } = before;
       return described({
         ...unchanged,
@@ -391,7 +427,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
 
     async deleteTransaction(id: string): Promise<Transaction> {
       const row = await transaction(id);
-      await backend.deleteTransaction(id);
+      await attemptWrite(() => backend.deleteTransaction(id));
       return described(row);
     },
 
@@ -399,14 +435,14 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       if (plan.length === 0) return 0;
       const batched = backend.retagTransactions;
       if (batched) {
-        const written = await batched.call(backend, plan);
+        const written = await attemptWrite(() => batched.call(backend, plan));
         forgetTransactions();
         return written;
       }
       // No batching here, so this is thousands of round trips. Sequential on
       // purpose: the API resets the connection under concurrency.
       for (const { id, category } of plan) {
-        await backend.editTransaction(id, { category });
+        await attemptWrite(() => backend.editTransaction(id, { category }));
       }
       forgetTransactions();
       return plan.length;

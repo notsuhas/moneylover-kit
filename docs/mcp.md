@@ -208,3 +208,16 @@ single writes remain non-idempotent and must be reconciled after a timeout.
 
 This prevents new unlinked offsets through the MCP. It does not automatically
 net future loans against debts, convert currencies, or repair historical records.
+
+### Fresh wallet reads
+
+Include `wallet` when calling `search_transactions` or `get_transactions` if the
+payment wallet is known. Mobile refreshes that wallet using the Android app's
+`account_id` filter rather than downloading every wallet. Omitting the hint
+keeps the full-account audit behavior.
+
+`record_transactions` automatically limits ordinary receipt duplicate checks,
+server readback and balances to the affected wallets. It still independently
+reads saved records after a write; it does not call the submitted input verified.
+Linked settlement receipts retain whole-account validation/readback. Keep using
+the same receiptId and inputs after timeouts; no blind retry behavior changed.

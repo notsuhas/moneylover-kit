@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- Refresh only the payment wallet when checking and verifying receipts, rather
+  than downloading the entire account history. Wallet-filtered searches and ID
+  lookups with a wallet hint use the same fresh snapshot. Full audits and linked
+  settlement validation retain account-wide reconciliation.
+
 ## 0.4.0
 
 ### Minor Changes
