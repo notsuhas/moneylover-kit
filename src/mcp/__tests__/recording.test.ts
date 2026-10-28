@@ -13,6 +13,7 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
   const directory = mkdtempSync(join(tmpdir(), "receipt-mcp-"));
   process.env.MONEYLOVER_CONFIG_DIR = directory;
   let historyReads = 0;
+  const historyScopes: string[] = [];
   let pushes = 0;
   let pushedCount = 0;
   const rows: unknown[] = [];
@@ -57,7 +58,14 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
     if (path === "/api/sync/pull/campaign/v2") return Response.json({ data: [] });
     if (path === "/api/sync/pull/transaction/v2") {
       historyReads++;
-      return Response.json({ data: rows, timestamp: 1 });
+      const body = JSON.parse(String(init?.body));
+      historyScopes.push(body.account_id ?? "*");
+      const data = body.account_id
+        ? rows.filter(
+            (row) => (row as { account: { _id: string } }).account._id === body.account_id,
+          )
+        : rows;
+      return Response.json({ data, timestamp: 1 });
     }
     if (path === "/api/sync/push/transaction/v2") {
       pushes++;
@@ -115,6 +123,11 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
     assert.equal(pushes, 1);
     assert.equal(pushedCount, 2);
     assert.equal(historyReads, 2);
+    assert.deepEqual(
+      historyScopes,
+      ["wallet", "wallet"],
+      "receipt duplicate check and server verification refresh only the payment wallet",
+    );
     assert.ok(!(await call()).isError);
     assert.equal(pushes, 1);
     assert.equal(historyReads, 3);

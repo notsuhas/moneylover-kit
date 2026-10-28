@@ -41,7 +41,13 @@ export function registerRecordingTool(
         key,
       );
     },
-    list: () => client.transactions(),
+    list: async (inputs) => {
+      if (inputs.some((input) => input.parentId)) return client.transactions();
+      const rows: Transaction[] = [];
+      for (const wallet of new Set(inputs.map((input) => input.wallet)))
+        rows.push(...(await client.transactions({ wallet })));
+      return rows;
+    },
     identity: (row, input) =>
       row.walletId === input.wallet &&
       (row.note === input.note ||
@@ -99,7 +105,7 @@ export function registerRecordingTool(
           ]);
           const entries = crossCurrencyCollection(input, rows, categories, wallets);
           const saved = await record(receiptId, entries);
-          const balances = await client.wallets();
+          const balances = await client.wallets(saved.map((row) => row.walletId));
           return json({
             verified: true,
             transactions: await show(saved),
@@ -184,7 +190,7 @@ export function registerRecordingTool(
           if (new Set(keys).size !== keys.length)
             throw new Error("Receipt entries need distinct wallet, time or note");
           const rows = await record(receiptId, inputs);
-          const walletsWithBalances = await client.wallets();
+          const walletsWithBalances = await client.wallets(rows.map((row) => row.walletId));
           return json({
             verified: true,
             transactions: await show(rows),

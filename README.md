@@ -182,9 +182,15 @@ the app derives them: sum the synced rows in integer minor units and exclude
 future-dated transactions. The result matched the web API for every wallet on a
 live 11,239-row account.
 
-The first run stores the full sync beside the token cache. Later reads pull only
-changes since that checkpoint, then balance, transaction and edit calls share
-the local mirror. This is the same shape as the app's local sync database.
+Wallet-filtered searches and ordinary receipt duplicate checks/readback fetch a
+fresh complete snapshot of only the affected wallets, using the Android app's
+`account_id` request filter. Receipt balances reuse the verified wallet
+snapshot. No cross-call TTL or incremental cursor is used for this fast path, so
+external edits and deletions remain visible on the next operation.
+
+Whole-account audits and linked loan/debt validation retain a full
+reconciliation. That full sync is stored beside the token cache and interrupted
+pulls can resume; wallet-scoped reads never replace its global checkpoint.
 
 To enable mobile:
 

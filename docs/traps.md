@@ -304,15 +304,19 @@ cross-API handle for a category is its name.
 
 ### You cannot read one transaction
 
-There is no get-by-id on either API. The only read is the whole account:
-`transaction/list-all` on web (one request) or `sync/pull/transaction/v2` on
-mobile (38 pages of 300 for ~11k rows). Combined with the full-replace write
-format — which means an edit *must* start from the live row — a single-row edit
-costs a whole-account read.
+No transaction-by-ID endpoint has been established. However, Android's
+`te.b` wallet pull adds `account_id` to `/api/sync/pull/transaction/v2` with
+`last_update=0`. This returns a fresh full snapshot of one wallet. Wallet-filtered
+searches, receipt checks/readback and affected-wallet balances use that path;
+ID lookup accepts an optional wallet hint. A scoped pull must not advance the
+global checkpoint or replace another wallet's records.
 
-So: persist the mobile sync checkpoint and rows. After the first full pull,
-balance calculation, search and full-replace edits apply only incremental
-changes to that local mirror.
+The APK also implements timestamp deltas and cursor pagination. Live timestamp
+deltas did not include known same-session writes, so restoring the old cursor
+cache would not prove receipt readback. Ordinary receipts therefore use fresh
+wallet snapshots; whole-account audits and cross-wallet settlement validation
+keep the full 300-row-page reconciliation. No larger page size was accepted by
+the live transaction endpoint in the 1,000/3,000/10,000 probes.
 
 ### Balances in different currencies are not comparable
 

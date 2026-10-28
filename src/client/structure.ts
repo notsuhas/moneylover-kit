@@ -28,9 +28,16 @@ export interface StructureDeps {
   cache: Cache;
   wallets: () => Promise<Wallet[]>;
   categories: () => Promise<Category[]>;
+  invalidateTransactions?: () => void;
 }
 
-export function createStructureApi({ backend, cache, wallets, categories }: StructureDeps) {
+export function createStructureApi({
+  backend,
+  cache,
+  wallets,
+  categories,
+  invalidateTransactions,
+}: StructureDeps) {
   function need<T>(method: T | undefined, what: keyof Capabilities): NonNullable<T> {
     if (!method || !backend.can[what]) {
       const other = backend.name === "web" ? "mobile" : "web";
@@ -46,7 +53,8 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
    * deleting a wallet deletes its transactions server-side, so a cached
    * transaction list would keep returning rows that no longer exist.
    */
-  const invalidate = () =>
+  const invalidate = () => {
+    invalidateTransactions?.();
     cache.drop(
       "wallets",
       "wallet-catalog",
@@ -58,6 +66,7 @@ export function createStructureApi({ backend, cache, wallets, categories }: Stru
       "web:categories",
       "mobile:transactions",
     );
+  };
 
   async function walletById(id: string): Promise<Wallet> {
     const hit = (await wallets()).find((w) => w.id === id);

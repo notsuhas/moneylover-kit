@@ -40,7 +40,7 @@ import { walletsWithBalances } from "./balances.js";
 import { createEvents } from "./events.js";
 import { createStructure } from "./structure.js";
 import { createSync } from "./sync.js";
-import { createTransactionStore } from "./transaction-store.js";
+import { createTransactionStore, mergeTransactions } from "./transaction-store.js";
 import { itemFrom, type PushItem, type RawTransaction } from "./transactions.js";
 import { newWalletItem, walletItem } from "./wallets.js";
 
@@ -80,12 +80,31 @@ export function createMobileBackend(
     pullSince<RawTransaction>("/api/sync/pull/transaction/v2", lastUpdate, options),
   );
   const rows = () => cache.read("mobile:transactions", () => store.sync());
-  const invalidate = () => cache.drop("mobile:transactions");
+  const walletTransactionKeys = new Set<string>();
+  const rowsInWallet = (walletId: string) => {
+    if (!walletId) throw new MoneyLoverError("wallet ID is required");
+    const key = `mobile:transactions:wallet:${walletId}`;
+    walletTransactionKeys.add(key);
+    return cache.read(key, async () => {
+      const result = await pullSince<RawTransaction>("/api/sync/pull/transaction/v2", 0, {
+        accountId: walletId,
+        onPage(chunk) {
+          if (chunk.some((row) => row.account?._id !== walletId))
+            throw new MoneyLoverError("Transaction provider ignored the requested wallet filter");
+        },
+      });
+      return mergeTransactions([], result.data);
+    });
+  };
+  const invalidate = () => cache.drop("mobile:transactions", ...walletTransactionKeys);
   const rawWallets = () =>
     cache.read("mobile:wallets", () => page<WireWallet>("/api/sync/pull/account"));
   const walletCatalog = async () =>
     (await rawWallets()).filter((wallet) => !wallet.isDelete).map(normaliseWallet);
-  const invalidateWallets = () => cache.drop("mobile:wallets");
+  const invalidateWallets = () => {
+    cache.drop("mobile:wallets");
+    invalidate();
+  };
 
   async function walletRow(id: string): Promise<WireWallet> {
     const row = (await rawWallets()).find((wallet) => wallet._id === id && !wallet.isDelete);
@@ -97,6 +116,14 @@ export function createMobileBackend(
     const row = (await rows()).find((t) => t._id === id && !t.isDelete);
     if (!row) throw new MoneyLoverError(`no transaction ${id}`);
     return row;
+  }
+
+  async function pushTransactions(items: PushItem[]): Promise<number> {
+    try {
+      return await push("transaction", items);
+    } finally {
+      invalidate();
+    }
   }
 
   async function addMany(inputs: NewTransaction[]): Promise<string[]> {
@@ -130,8 +157,7 @@ export function createMobileBackend(
         version: 0,
       } satisfies PushItem;
     });
-    await push("transaction", items);
-    invalidate();
+    await pushTransactions(items);
     return ids;
   }
 
@@ -153,8 +179,19 @@ export function createMobileBackend(
       return { id: info._id, email: info.email, deviceLimit: info.limitDevice ?? 0 };
     },
 
-    async wallets(): Promise<Wallet[]> {
-      const [raw, transactions] = await Promise.all([rawWallets(), rows()]);
+    async wallets(walletIds?: string[]): Promise<Wallet[]> {
+      if (walletIds?.length === 0) return [];
+      if (!walletIds) {
+        const [raw, transactions] = await Promise.all([rawWallets(), rows()]);
+        return walletsWithBalances(raw, transactions);
+      }
+      const requested = new Set(walletIds);
+      const raw = (await rawWallets()).filter(
+        (wallet) => !wallet.isDelete && requested.has(wallet._id),
+      );
+      for (const id of requested)
+        if (!raw.some((wallet) => wallet._id === id)) throw new MoneyLoverError(`no wallet ${id}`);
+      const transactions = (await Promise.all([...requested].map(rowsInWallet))).flat();
       return walletsWithBalances(raw, transactions);
     },
 
@@ -194,6 +231,10 @@ export function createMobileBackend(
 
     async transactions(): Promise<Transaction[]> {
       return (await rows()).filter((t) => !t.isDelete).map(normaliseTransaction);
+    },
+
+    async transactionsInWallet(walletId: string): Promise<Transaction[]> {
+      return (await rowsInWallet(walletId)).map(normaliseTransaction);
     },
 
     async addWallet(input: NewWallet): Promise<string> {
@@ -248,8 +289,7 @@ export function createMobileBackend(
       if (patch.people !== undefined) item.p = patch.people;
       if (patch.eventId !== undefined) item.cp = patch.eventId ? [patch.eventId] : [];
       if (patch.excludeReport !== undefined) item.er = patch.excludeReport;
-      await push("transaction", [item]);
-      invalidate();
+      await pushTransactions([item]);
     },
 
     /**
@@ -266,17 +306,15 @@ export function createMobileBackend(
         const target = findCategory(cats, category, row.account._id);
         return itemFrom(row, target.id, 2);
       });
-      const written = await push("transaction", items);
-      invalidate();
+      const written = await pushTransactions(items);
       return written;
     },
 
     async deleteTransaction(id: string): Promise<void> {
       const row = await rowFor(id);
-      await push("transaction", [
+      await pushTransactions([
         { ...itemFrom(row, row.category._id, 3), version: 1, isDelete: true },
       ]);
-      invalidate();
     },
 
     ...createStructure({

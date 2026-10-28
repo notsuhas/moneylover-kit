@@ -1,17 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-/**
- * A short-lived read cache, shared by the client *and* the backends.
- *
- * Neither API can fetch one transaction: the only reads are "every transaction".
- * Mobile drains that sync in resumable pages, but it is still the expensive
- * read, so an edit must reuse the list that found its row.
- *
- * Sharing one cache across both layers is what makes an edit cheap: the search
- * that found the row has already paid for the list. Writes invalidate rather
- * than wait for expiry, because an edit rebuilt from a stale row would push
- * stale fields back.
- */
+/** Operation-scoped reads share fresh snapshots; writes invalidate global and wallet views. */
 
 export interface Cache {
   scope<T>(operation: () => Promise<T>): Promise<T>;

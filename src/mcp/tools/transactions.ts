@@ -19,7 +19,7 @@ export function registerTransactionTools(
       title: "Search transactions",
       description:
         "Find transactions to read, or to get an id for editing or deleting. " +
-        "Every filter is optional and they combine; newest first.",
+        "Every filter is optional and they combine; newest first. Include the payment wallet when known for a fresh server-side wallet read instead of downloading the whole account.",
       inputSchema: {
         note: z.string().optional().describe("Case-insensitive substring of the note"),
         wallet: z.string().optional().describe("Wallet name"),

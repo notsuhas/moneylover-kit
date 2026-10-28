@@ -208,10 +208,12 @@ export interface Backend {
   readonly name: BackendName;
   readonly can: Capabilities;
   account(): Promise<Account>;
-  wallets(): Promise<Wallet[]>;
+  wallets(walletIds?: string[]): Promise<Wallet[]>;
   walletCatalog?(): Promise<Wallet[]>;
   categories(): Promise<Category[]>;
   transactions(): Promise<Transaction[]>;
+  /** Fresh complete snapshot of a single wallet, without a global checkpoint change. */
+  transactionsInWallet?(walletId: string): Promise<Transaction[]>;
   /** Events / trips. Present only where `can.events` says so. */
   events?(): Promise<Event[]>;
   addEvent?(input: NewEvent): Promise<string>;
