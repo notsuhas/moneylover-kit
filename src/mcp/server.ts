@@ -36,7 +36,13 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
     const [wallets, events, categories] = await Promise.all([
       client.walletCatalog(),
       client.events(),
-      client.categories(),
+      rows.every((row) => row.categoryName)
+        ? Promise.resolve([])
+        : Promise.all(
+            [...new Set(rows.map((row) => row.walletId))].map((wallet) =>
+              client.categories(wallet),
+            ),
+          ).then((groups) => groups.flat()),
     ]);
     const name = naming(wallets, events, categories);
     return rows.map(name);

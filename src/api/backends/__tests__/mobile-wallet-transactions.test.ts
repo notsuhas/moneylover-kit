@@ -36,6 +36,7 @@ function fixture() {
     failure: "",
     ignoreFilter: false,
     rejectPush: false,
+    categoryName: "Food",
   };
   const requests: { wallet?: string; skip: number; lastUpdate: number }[] = [];
   globalThis.fetch = (async (input, init) => {
@@ -50,12 +51,14 @@ function fixture() {
       });
     if (path === "/api/sync/pull/category/v2")
       return Response.json({
-        data: ["yen", "bank"].map((wallet) => ({
-          _id: `food-${wallet}`,
-          name: "Food",
-          type: 2,
-          account: { _id: wallet },
-        })),
+        data: ["yen", "bank"]
+          .filter((wallet) => state.ignoreFilter || !body.account_id || wallet === body.account_id)
+          .map((wallet) => ({
+            _id: `food-${wallet}`,
+            name: state.categoryName,
+            type: 2,
+            account: { _id: wallet },
+          })),
       });
     if (path === "/api/sync/pull/transaction/v2") {
       requests.push({
@@ -188,6 +191,19 @@ test("failed and unfiltered wallet pulls cannot overwrite the global mirror or c
     );
     assert.equal(readFileSync(f.mirror, "utf8"), before);
     assert.equal(JSON.parse(before).timestamp, 42);
+  } finally {
+    f.close();
+  }
+});
+
+test("wallet category reads remain fresh and reject an ignored provider filter", async () => {
+  const f = fixture();
+  try {
+    assert.equal((await f.backend.categories("yen")).length, 1);
+    f.state.categoryName = "Renamed";
+    assert.equal((await f.backend.categories("yen"))[0]?.name, "Renamed");
+    f.state.ignoreFilter = true;
+    await assert.rejects(f.backend.categories("yen"), /ignored the requested wallet filter/);
   } finally {
     f.close();
   }
