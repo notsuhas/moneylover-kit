@@ -70,10 +70,16 @@ export function registerRecordingTool(
         throw new Error("Receipt fields conflict; no overwrite attempted");
     },
     validate: async (inputs, rows) => {
-      const [categories, wallets] = await Promise.all([
-        client.categories(),
-        client.walletCatalog(),
-      ]);
+      const wallets = await client.walletCatalog();
+      const categories = inputs.some((input) => input.parentId)
+        ? await client.categories()
+        : (
+            await Promise.all(
+              [...new Set(inputs.map((input) => input.wallet))].map((wallet) =>
+                client.categories(wallet),
+              ),
+            )
+          ).flat();
       validateCollections(inputs, rows, categories, wallets);
     },
     create: (inputs) => client.addTransactions(inputs),
@@ -155,10 +161,14 @@ export function registerRecordingTool(
     async ({ receiptId, entries }) =>
       exclusive(() =>
         client.withFreshReads(async () => {
-          const [wallets, categories] = await Promise.all([
-            client.walletCatalog(),
-            client.categories(),
-          ]);
+          const wallets = await client.walletCatalog();
+          const categories = (
+            await Promise.all(
+              [...new Set(entries.map((entry) => findWallet(wallets, entry.wallet).id))].map(
+                (wallet) => client.categories(wallet),
+              ),
+            )
+          ).flat();
           const inputs = entries.map((entry) => {
             transactionDate(entry);
             const wallet = findWallet(wallets, entry.wallet);

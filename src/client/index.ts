@@ -79,7 +79,7 @@ export interface MoneyLover {
   wallets(walletIds?: string[]): Promise<Wallet[]>;
   /** Wallet identities and currency, without calculating balances. */
   walletCatalog(): Promise<Wallet[]>;
-  categories(): Promise<Category[]>;
+  categories(wallet?: string): Promise<Category[]>;
   events(): Promise<Event[]>;
   addEvent(input: NewEvent): Promise<Event>;
   /** Global, nestable category records. Empty where the backend has no such layer. */
@@ -184,7 +184,25 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
   };
   const walletCatalog = () =>
     cache.read("wallet-catalog", () => backend.walletCatalog?.() ?? backend.wallets());
-  const categories = () => cache.read("categories", () => backend.categories());
+  const categoryKeys = new Set<string>();
+  const categories = async (wallet?: string): Promise<Category[]> => {
+    if (!wallet) return cache.read("categories", () => backend.categories());
+    const id = findWallet(await walletCatalog(), wallet).id;
+    const key = `categories:wallet:${id}`;
+    categoryKeys.add(key);
+    return cache.read(key, async () =>
+      (await backend.categories(id)).filter(
+        (category) => !category.walletId || category.walletId === id,
+      ),
+    );
+  };
+  async function categoriesFor(inputs: NewTransaction[]): Promise<Category[]> {
+    if (inputs.some((input) => input.parentId)) return categories();
+    const result: Category[] = [];
+    for (const wallet of new Set(inputs.map((input) => input.wallet)))
+      result.push(...(await categories(wallet)));
+    return result;
+  }
   const allTransactions = () => cache.read("transactions", () => backend.transactions());
   const walletTransactions = (walletId: string) => {
     const key = `transactions:wallet:${walletId}`;
@@ -232,7 +250,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     inputs: NewTransaction[],
     rows?: Transaction[],
   ): Promise<void> {
-    const [cats, allWallets] = await Promise.all([categories(), walletCatalog()]);
+    const [cats, allWallets] = await Promise.all([categoriesFor(inputs), walletCatalog()]);
     if (
       !inputs.some(
         (input) =>
@@ -246,7 +264,12 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       return;
     if (backend.name !== "mobile") throw new MoneyLoverError("loan/debt linking requires mobile");
     if (!rows) forgetTransactions();
-    validateCollections(inputs, rows ?? (await allTransactions()), cats, await walletCatalog());
+    validateCollections(
+      inputs,
+      rows ?? (await allTransactions()),
+      await categories(),
+      await walletCatalog(),
+    );
   }
 
   async function recordLending(
@@ -261,7 +284,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     if ((kind === "lend" || kind === "borrow") && input.parentId)
       throw new MoneyLoverError("Only collect/repay accept parentId");
     const wallet = findWallet(await walletCatalog(), input.wallet);
-    const category = lendingCategory(await categories(), kind, wallet.id);
+    const category = lendingCategory(await categories(wallet.id), kind, wallet.id);
     const entry: NewTransaction = {
       wallet: wallet.id,
       category: category.id,
@@ -290,7 +313,10 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     cache,
     wallets,
     categories,
-    invalidateTransactions: forgetTransactions,
+    invalidateTransactions: () => {
+      forgetTransactions();
+      cache.drop(...categoryKeys);
+    },
   });
 
   return {
@@ -311,7 +337,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       const walletId = wallet ? findWallet(await walletCatalog(), wallet).id : undefined;
       let scoped = walletId ? await walletTransactions(walletId) : await allTransactions();
       if (category) {
-        const all = await categories();
+        const all = await categories(walletId);
         const wanted = new Set(
           all
             .filter((c) => c.id === category || c.name.toLowerCase() === category.toLowerCase())
@@ -334,7 +360,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     async addTransaction(input: NewTransaction): Promise<Transaction> {
       const [wallet, category] = await Promise.all([
         walletCatalog().then((all) => findWallet(all, input.wallet)),
-        categories().then((all) => findCategory(all, input.category)),
+        categories(input.wallet).then((all) => findCategory(all, input.category)),
       ]);
       transactionDate(input);
       await validateSettlements([input]);
@@ -343,7 +369,10 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
     },
 
     async addTransactions(inputs: NewTransaction[]): Promise<Transaction[]> {
-      const [allWallets, allCategories] = await Promise.all([walletCatalog(), categories()]);
+      const [allWallets, allCategories] = await Promise.all([
+        walletCatalog(),
+        categoriesFor(inputs),
+      ]);
       const targets = inputs.map((input) => {
         transactionDate(input);
         const wallet = findWallet(allWallets, input.wallet);

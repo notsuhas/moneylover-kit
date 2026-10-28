@@ -210,7 +210,7 @@ export interface Backend {
   account(): Promise<Account>;
   wallets(walletIds?: string[]): Promise<Wallet[]>;
   walletCatalog?(): Promise<Wallet[]>;
-  categories(): Promise<Category[]>;
+  categories(walletId?: string): Promise<Category[]>;
   transactions(): Promise<Transaction[]>;
   /** Fresh complete snapshot of a single wallet, without a global checkpoint change. */
   transactionsInWallet?(walletId: string): Promise<Transaction[]>;

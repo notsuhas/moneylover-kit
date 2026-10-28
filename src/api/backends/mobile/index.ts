@@ -129,7 +129,10 @@ export function createMobileBackend(
   async function addMany(inputs: NewTransaction[]): Promise<string[]> {
     if (!inputs.length || inputs.length > 50)
       throw new MoneyLoverError("Batch must contain 1–50 transactions");
-    const [wallets, categories] = await Promise.all([walletCatalog(), backend.categories()]);
+    const wallets = await walletCatalog();
+    const categories: Category[] = [];
+    for (const id of new Set(inputs.map((input) => findWallet(wallets, input.wallet).id)))
+      categories.push(...(await backend.categories(id)));
     const ids = inputs.map(() => gid());
     const items = inputs.map((input, index) => {
       const wallet = findWallet(wallets, input.wallet);
@@ -197,8 +200,20 @@ export function createMobileBackend(
 
     walletCatalog,
 
-    async categories(): Promise<Category[]> {
-      const raw = await pull<RawCategory>("/api/sync/pull/category/v2");
+    async categories(walletId?: string): Promise<Category[]> {
+      const raw = walletId
+        ? (
+            await pullSince<RawCategory>("/api/sync/pull/category/v2", 0, {
+              accountId: walletId,
+              onPage(chunk) {
+                if (chunk.some((row) => row.account?._id !== walletId))
+                  throw new MoneyLoverError(
+                    "Category provider ignored the requested wallet filter",
+                  );
+              },
+            })
+          ).data
+        : await pull<RawCategory>("/api/sync/pull/category/v2");
       return raw
         .filter((c) => !c.isDelete)
         .map((c) => ({

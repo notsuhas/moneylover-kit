@@ -13,6 +13,7 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
   const directory = mkdtempSync(join(tmpdir(), "receipt-mcp-"));
   process.env.MONEYLOVER_CONFIG_DIR = directory;
   let historyReads = 0;
+  const categoryScopes: string[] = [];
   const historyScopes: string[] = [];
   let pushes = 0;
   let pushedCount = 0;
@@ -54,7 +55,13 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
           { _id: "jpy", name: "Yen", currency_id: 6 },
         ],
       });
-    if (path === "/api/sync/pull/category/v2") return Response.json({ data: categories });
+    if (path === "/api/sync/pull/category/v2") {
+      const { account_id } = JSON.parse(String(init?.body));
+      categoryScopes.push(account_id ?? "*");
+      return Response.json({
+        data: categories.filter((category) => !account_id || category.account._id === account_id),
+      });
+    }
     if (path === "/api/sync/pull/campaign/v2") return Response.json({ data: [] });
     if (path === "/api/sync/pull/transaction/v2") {
       historyReads++;
@@ -118,6 +125,11 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
         arguments: { receiptId: "lunch-123", entries: items },
       });
     const result = await call();
+    assert.ok(categoryScopes.length > 0);
+    assert.ok(
+      categoryScopes.every((wallet) => wallet === "wallet"),
+      "ordinary receipts skip unrelated wallets categories",
+    );
     assert.ok(!result.isError, JSON.stringify(result));
     assert.match(JSON.stringify(result), /verified/);
     assert.equal(pushes, 1);

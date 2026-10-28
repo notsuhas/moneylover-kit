@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+### Patch Changes
+
+- Read fresh categories only for the wallets in an ordinary receipt, rather than
+  paging through every wallet's categories. Use category names already present
+  on saved transactions when rendering results. Linked settlement validation
+  retains the full category catalog.
+
 ## 0.4.1
 
 ### Patch Changes
