@@ -19,7 +19,13 @@ import {
   lendingSummary,
   type PersonBalance,
 } from "../core/lending.js";
-import { categoryIndex, filterTransactions, findCategory, findWallet } from "../core/query.js";
+import {
+  categoryIndex,
+  filterCategory,
+  filterTransactions,
+  findCategory,
+  findWallet,
+} from "../core/query.js";
 import type {
   Backend,
   BackendName,
@@ -336,22 +342,7 @@ export function createClient(options: ClientOptions = {}): MoneyLover {
       const { wallet, category, ...rest } = query;
       const walletId = wallet ? findWallet(await walletCatalog(), wallet).id : undefined;
       let scoped = walletId ? await walletTransactions(walletId) : await allTransactions();
-      if (category) {
-        const all = await categories(walletId);
-        const wanted = new Set(
-          all
-            .filter((c) => c.id === category || c.name.toLowerCase() === category.toLowerCase())
-            .map((c) => c.name.toLowerCase()),
-        );
-        if (wanted.size === 0) {
-          throw new MoneyLoverError(`no category ${JSON.stringify(category)}`);
-        }
-        const lookup = categoryIndex(all);
-        scoped = scoped.filter((t) => {
-          const name = lookup(t)?.name ?? t.categoryName;
-          return name ? wanted.has(name.toLowerCase()) : false;
-        });
-      }
+      if (category) scoped = filterCategory(scoped, await categories(walletId), category);
       return filterTransactions(scoped, rest);
     },
 

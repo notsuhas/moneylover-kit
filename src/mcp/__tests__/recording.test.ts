@@ -96,7 +96,7 @@ test("receipt tool batches expense and loan, verifies fresh rows, returns balanc
     }
     throw new Error(`Unexpected API path ${path}`);
   }) as typeof fetch;
-  const server = createMcpServer({ backend: "mobile", token: "test-token" });
+  const server = createMcpServer({ ledgerPath: false, backend: "mobile", token: "test-token" });
   const caller = new Client({ name: "receipt-test", version: "1" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);

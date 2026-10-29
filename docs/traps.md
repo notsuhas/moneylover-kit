@@ -116,7 +116,7 @@ auth problem. Send a browser UA.
 ### The connection resets under concurrency
 
 `fetch` *throws* rather than returning a response, so a retry that only inspects
-`res.status` misses it entirely. Keep calls sequential and retry thrown network
+`res.status` misses it entirely. Keep calls sequential and retry thrown read network
 errors as well as 429/5xx.
 
 ## Categories

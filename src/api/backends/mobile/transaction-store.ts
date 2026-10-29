@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AuthOptions } from "../../auth.js";
@@ -10,7 +10,6 @@ interface StoredTransactions {
   version?: 2;
   timestamp: number;
   rows: RawTransaction[];
-  pending?: { nextSkip: number; timestamp: number };
 }
 
 function storePath(email: string): string {
@@ -18,16 +17,6 @@ function storePath(email: string): string {
     process.env.MONEYLOVER_CONFIG_DIR ?? process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
   const who = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 12);
   return join(base, "moneylover-kit", `mobile-transactions-${who}.json`);
-}
-
-function read(path: string | undefined): StoredTransactions {
-  if (!path) return { timestamp: 0, rows: [] };
-  try {
-    const stored = JSON.parse(readFileSync(path, "utf8")) as StoredTransactions;
-    return stored.version === 2 ? stored : { timestamp: 0, rows: [] };
-  } catch {
-    return { timestamp: 0, rows: [] };
-  }
 }
 
 function write(path: string | undefined, state: StoredTransactions): void {
@@ -65,24 +54,9 @@ export function createTransactionStore(
   let inFlight: Promise<RawTransaction[]> | undefined;
 
   async function sync(): Promise<RawTransaction[]> {
-    const stored = read(path);
-    const current = stored.pending ? stored : { timestamp: 0, rows: [] };
-    let rows = current.rows;
-    let checkpoint = current.pending?.timestamp;
-    const update = await pull(0, {
-      skip: current.pending?.nextSkip ?? 0,
-      onPage(chunk, state) {
-        rows = mergeTransactions(rows, chunk);
-        checkpoint ??= state.timestamp;
-        write(path, {
-          timestamp: 0,
-          rows,
-          pending: { nextSkip: state.nextSkip, timestamp: checkpoint },
-        });
-      },
-    });
-    if (!path) rows = mergeTransactions(rows, update.data);
-    write(path, { timestamp: checkpoint ?? update.timestamp, rows });
+    const update = await pull(0, { skip: 0 });
+    const rows = mergeTransactions([], update.data);
+    write(path, { timestamp: update.timestamp, rows });
     return rows;
   }
 

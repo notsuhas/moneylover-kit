@@ -28,7 +28,7 @@ describe("createMcpServer", () => {
     const before = { ...process.env };
     Object.assign(process.env, env);
     try {
-      const server = createMcpServer({ use: backend });
+      const server = createMcpServer({ ledgerPath: false, use: backend });
       return Object.keys(
         (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools,
       ).sort();

@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MoneyLover } from "../../client/index.js";
 import type { Transaction } from "../../core/types.js";
+import type { createLocalReads } from "../ledger.js";
 import { DATE, DATE_TIME, json } from "../present.js";
 
 export type Rendering = (rows: Transaction[]) => Promise<Record<string, unknown>[]>;
@@ -12,6 +13,7 @@ export function registerTransactionTools(
   server: McpServer,
   client: MoneyLover,
   show: Rendering,
+  reads: ReturnType<typeof createLocalReads>,
 ): void {
   server.registerTool(
     "search_transactions",
@@ -19,7 +21,7 @@ export function registerTransactionTools(
       title: "Search transactions",
       description:
         "Find transactions to read, or to get an id for editing or deleting. " +
-        "Every filter is optional and they combine; newest first. Include the payment wallet when known for a fresh server-side wallet read instead of downloading the whole account.",
+        "Filters combine; newest first. Reads the local ledger immediately and returns lastSyncedAt/stale/refreshing. Background refresh retains the last complete snapshot on failure. Pass fresh=true for audits; include the payment wallet to scope reconciliation.",
       inputSchema: {
         note: z.string().optional().describe("Case-insensitive substring of the note"),
         wallet: z.string().optional().describe("Wallet name"),
@@ -29,17 +31,13 @@ export function registerTransactionTools(
         minAmount: z.number().optional().describe("Compared to the absolute value"),
         maxAmount: z.number().optional().describe("Compared to the absolute value"),
         limit: z.number().int().min(1).max(200).default(25),
+        fresh: z
+          .boolean()
+          .default(false)
+          .describe("Wait for API reconciliation; use for audits and latest-state checks"),
       },
     },
-    async ({ limit, ...query }) =>
-      client.withFreshReads(async () => {
-        const all = await client.transactions(query);
-        return json({
-          matched: all.length,
-          returned: Math.min(all.length, limit),
-          transactions: await show(all.slice(0, limit)),
-        });
-      }),
+    async ({ limit, fresh, ...query }) => json(await reads.search(query, limit, fresh)),
   );
 
   server.registerTool(

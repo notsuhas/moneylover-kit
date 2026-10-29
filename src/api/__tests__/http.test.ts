@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it, mock } from "node:test";
+import { afterEach, describe, it, mock, test } from "node:test";
 import { MoneyLoverError } from "../../core/types.js";
 import { post, unwrap } from "../http.js";
 
@@ -141,4 +141,26 @@ describe("unwrap", () => {
   it("falls back to a generic message when none is given", () => {
     assert.throws(() => unwrap({ error: 5 }), /Money Lover API error/);
   });
+});
+
+test("financial push failures are never retried without reconciliation", async () => {
+  const before = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      throw new TypeError("response lost after commit");
+    }) as typeof fetch;
+    await assert.rejects(post("https://example.test/api/sync/push/transaction/v2"));
+    assert.equal(calls, 1);
+    calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response("unavailable", { status: 503 });
+    }) as typeof fetch;
+    await assert.rejects(post("https://example.test/api/sync/push/transaction/v2"));
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = before;
+  }
 });

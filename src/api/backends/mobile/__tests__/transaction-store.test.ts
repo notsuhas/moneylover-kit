@@ -86,7 +86,7 @@ describe("mobile transaction store", () => {
     }
   });
 
-  it("resumes the first sync from the last persisted page", async () => {
+  it("restarts a failed full reconciliation instead of publishing partial pages", async () => {
     const directory = mkdtempSync(join(tmpdir(), "moneylover-store-"));
     const before = process.env.MONEYLOVER_CONFIG_DIR;
     process.env.MONEYLOVER_CONFIG_DIR = directory;
@@ -105,8 +105,8 @@ describe("mobile transaction store", () => {
         return { data, timestamp: 11 };
       });
       await assert.rejects(() => store.sync(), /network reset/);
-      assert.deepEqual(await store.sync(), [row("a", 1), row("b", 2)]);
-      assert.deepEqual(skips, [0, 300]);
+      assert.deepEqual(await store.sync(), [row("b", 2)]);
+      assert.deepEqual(skips, [0, 0]);
     } finally {
       if (before === undefined) delete process.env.MONEYLOVER_CONFIG_DIR;
       else process.env.MONEYLOVER_CONFIG_DIR = before;

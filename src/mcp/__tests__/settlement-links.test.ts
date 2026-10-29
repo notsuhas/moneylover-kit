@@ -56,6 +56,7 @@ test("every MCP write path requires native settlement links and receipt retries 
     throw new Error(`Unexpected path ${path}`);
   }) as typeof fetch;
   const server = createMcpServer({
+    ledgerPath: false,
     backend: "mobile",
     token: "test",
     email: "test@example.invalid",

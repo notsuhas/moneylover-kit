@@ -31,16 +31,19 @@ export interface RequestOptions {
   timeoutMs?: number;
 }
 
-/**
- * POST and decode.
- *
- * Retries 429/5xx and thrown network errors. That second half matters: `fetch`
- * throws rather than returning a response on a reset connection, and Money
- * Lover resets under concurrency — so a status-only retry misses it entirely.
- * Keep calls sequential.
- */
+/** Retry reads, but never replay an uncertain financial push. */
 export async function post<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const { headers = {}, body, form, attempts = 4, timeoutMs = 60_000 } = options;
+  const {
+    headers = {},
+    body,
+    form,
+    attempts = /\/api\/sync\/push\/|\/(?:transaction|wallet|category)\/(?:add|edit|delete)(?:$|\?)/.test(
+      url,
+    )
+      ? 1
+      : 4,
+    timeoutMs = 60_000,
+  } = options;
   const payload = form ? new URLSearchParams(form).toString() : JSON.stringify(body ?? {});
   const contentType = form
     ? "application/x-www-form-urlencoded"

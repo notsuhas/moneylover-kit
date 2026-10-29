@@ -46,6 +46,12 @@ export function naming(wallets: Wallet[], events: Event[], categories: Category[
 
 export const INSTRUCTIONS = `Read and write transactions in a live Money Lover account.
 
+MCP read tools use persistent SQLite snapshots and include sync metadata. Treat
+lastSyncedAt as the as-of time. Pass fresh=true for audits, current balances and
+settlement decisions. Cached results are not independent write verification.
+Stale reads return immediately and trigger background reconciliation; writes
+invalidate snapshots, and receipt verification always reads upstream directly.
+
 For new receipts prefer record_transactions: it performs duplicate checks, batches all
 expense and lending/borrowing legs, and returns verified saved records and balances.
 Keep a stable receiptId. Do not search before record_transactions or repeat search_transactions or list_wallets after verified=true. Include wallet on searches and ID lookups when known to avoid a whole-account refresh.
