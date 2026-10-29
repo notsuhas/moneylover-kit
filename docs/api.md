@@ -225,14 +225,17 @@ API can accept only some entries, so this is not a distributed or atomic commit.
 A private journal under the existing config directory records the intent before
 writing. Retries with the same ID and identical inputs reconcile fresh data;
 conflicts, deleted records and uncertain missing entries stop without another
-write. Do not switch IDs after a timeout. A stale `writer.lock` after a process
-crash requires reconciliation and operator removal before recording can resume.
+write. Do not switch IDs after a timeout. SQLite releases writer locks on exit. Uncertain pending writes still require
+reconciliation. A legacy `writer.lock` blocks new writes until an operator
+reconciles and removes it; stop all old writers before upgrading.
 
 Successful responses include `verified: true`, saved transactions and current
 balances for their wallets. No additional search or balance call is needed.
-Fresh reconciliation still reads full history; no persistent read TTL is added.
+Receipt reconciliation still reads upstream directly. MCP read-only tools use
+persistent snapshots with `sync` metadata and an optional `fresh: true` override.
 
-`get_transactions` returns only requested IDs from one fresh reconciliation.
+`get_transactions` returns only requested IDs from the local snapshot, or a fresh
+reconciliation when requested or when an ID is missing.
 `collect_loan_cross_currency` takes both the amount cleared in the original
 loan currency and the actual amount received in the destination wallet currency.
 It records a linked collection in the original wallet, an excluded outgoing

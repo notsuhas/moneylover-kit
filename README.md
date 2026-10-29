@@ -182,15 +182,16 @@ the app derives them: sum the synced rows in integer minor units and exclude
 future-dated transactions. The result matched the web API for every wallet on a
 live 11,239-row account.
 
-Wallet-filtered searches and ordinary receipt duplicate checks/readback fetch a
-fresh complete snapshot of only the affected wallets, using the Android app's
-`account_id` request filter. Receipt balances reuse the verified wallet
+Wallet-filtered fresh searches and ordinary receipt duplicate checks/readback
+fetch a fresh complete snapshot of only the affected wallets, using the Android
+app's `account_id` request filter. Receipt balances reuse the verified wallet
 snapshot. No cross-call TTL or incremental cursor is used for this fast path, so
 external edits and deletions remain visible on the next operation.
 
 Whole-account audits and linked loan/debt validation retain a full
-reconciliation. That full sync is stored beside the token cache and interrupted
-pulls can resume; wallet-scoped reads never replace its global checkpoint.
+reconciliation. Interrupted pulls restart from the beginning; partial pages
+never become a complete snapshot. Wallet-scoped reads do not replace other
+wallets.
 
 To enable mobile:
 
@@ -278,3 +279,12 @@ must complete a successful publish within two days or npm expires it.
 If publishing returns E404 while package reads work, check the package's trusted
 publisher configuration and repository metadata before replacing tokens. Passing
 CI does not verify npm publish authorization; verify the release job itself.
+
+## Persistent MCP reads
+
+MCP read tools now return local SQLite snapshots with explicit `sync` metadata.
+Pass `fresh: true` for an audit or latest upstream state. A stale read starts
+background reconciliation; receipt writes and verification always use fresh API
+reads. This reduces repeated provider calls without promising network latency.
+Node 22.13+ is required. See [MCP caching](docs/mcp.md) for migration, response
+shape changes, recovery and private-volume requirements.

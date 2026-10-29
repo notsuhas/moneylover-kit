@@ -61,6 +61,21 @@ export function categoryIndex(categories: Category[]): (t: Transaction) => Categ
   };
 }
 
+export function filterCategory(
+  rows: Transaction[],
+  categories: Category[],
+  category: string,
+): Transaction[] {
+  const wanted = new Set(
+    categories.filter((c) => matches(category, c.name, c.id)).map((c) => c.name.toLowerCase()),
+  );
+  if (!wanted.size) throw new MoneyLoverError(`no category ${JSON.stringify(category)}`);
+  const lookup = categoryIndex(categories);
+  return rows.filter((row) =>
+    wanted.has((lookup(row)?.name ?? row.categoryName ?? "").toLowerCase()),
+  );
+}
+
 /** Apply a query. Backend-agnostic: both return the same normalised rows. */
 export function filterTransactions(
   transactions: Transaction[],

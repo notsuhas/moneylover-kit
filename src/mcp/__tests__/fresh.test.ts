@@ -27,7 +27,7 @@ test("consecutive MCP reads see external edits and deletions without waiting", a
     editTransaction: async () => {},
     deleteTransaction: async () => {},
   };
-  const server = createMcpServer({ use: backend });
+  const server = createMcpServer({ ledgerPath: false, use: backend });
   const caller = new Client({ name: "fresh-test", version: "1" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);
@@ -92,7 +92,7 @@ test("expense writes and rendering skip balance history while explicit balances 
     }
     throw new Error("unexpected API path: " + path);
   }) as typeof fetch;
-  const server = createMcpServer({ backend: "mobile", token: "test-token" });
+  const server = createMcpServer({ ledgerPath: false, backend: "mobile", token: "test-token" });
   const caller = new Client({ name: "wallet-test", version: "1" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);

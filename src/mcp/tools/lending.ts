@@ -3,10 +3,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { MoneyLover } from "../../client/index.js";
+import type { createLocalReads } from "../ledger.js";
 import { DATE, DATE_TIME, json } from "../present.js";
 import type { Rendering } from "./transactions.js";
 
-export function registerLendingTools(server: McpServer, client: MoneyLover, show: Rendering): void {
+export function registerLendingTools(
+  server: McpServer,
+  client: MoneyLover,
+  show: Rendering,
+  reads: ReturnType<typeof createLocalReads>,
+): void {
   server.registerTool(
     "collect_loan",
     {
@@ -77,21 +83,26 @@ export function registerLendingTools(server: McpServer, client: MoneyLover, show
         "One row per person per currency — balances are never added across currencies.",
       inputSchema: {
         person: z.string().optional().describe("Substring match on the person tag"),
+        fresh: z.boolean().default(false),
       },
     },
-    async ({ person }) =>
-      client.withFreshReads(async () => {
-        const rows = await client.lending(person);
-        // Totals per currency: summing across them would invent an exchange rate.
-        const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {
-          const mine = rows.filter((r) => r.currencyId === currencyId);
-          return {
-            currencyId,
-            owedToYou: mine.reduce((sum, r) => sum + r.outstanding, 0),
-            youOwe: mine.reduce((sum, r) => sum + r.owing, 0),
-          };
-        });
-        return json({ people: rows, totals });
-      }),
+    async ({ person, fresh }) => {
+      const saved = await reads.value(
+        `lending:${person ?? ""}`,
+        () => client.lending(person),
+        fresh,
+      );
+      const rows = saved.value;
+      // Totals per currency: summing across them would invent an exchange rate.
+      const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {
+        const mine = rows.filter((r) => r.currencyId === currencyId);
+        return {
+          currencyId,
+          owedToYou: mine.reduce((sum, r) => sum + r.outstanding, 0),
+          youOwe: mine.reduce((sum, r) => sum + r.owing, 0),
+        };
+      });
+      return json({ people: rows, totals, sync: saved.sync });
+    },
   );
 }

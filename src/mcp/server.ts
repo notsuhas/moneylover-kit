@@ -10,8 +10,10 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { type ClientOptions, createClient, type MoneyLover } from "../client/index.js";
+import { createClient, type MoneyLover } from "../client/index.js";
+import type { Ledger } from "../core/ledger.js";
 import type { Transaction } from "../core/types.js";
+import { createLedger, createLocalReads, type ILedgerOptions, observeWrites } from "./ledger.js";
 import { INSTRUCTIONS, json, naming } from "./present.js";
 import { deletionsAllowed, registerDeletionTools } from "./tools/deletions.js";
 import { registerLendingTools } from "./tools/lending.js";
@@ -20,8 +22,9 @@ import { registerReferenceTools } from "./tools/reference.js";
 import { registerStructureTools, structureAllowed } from "./tools/structure.js";
 import { type Rendering, registerTransactionTools } from "./tools/transactions.js";
 
-export function createMcpServer(options: ClientOptions = {}): McpServer {
-  const client: MoneyLover = createClient({ cacheSeconds: 0, ...options });
+export function createMcpServer(options: ILedgerOptions = {}): McpServer {
+  const ledger: Ledger | undefined = createLedger(options);
+  const client: MoneyLover = observeWrites(createClient({ cacheSeconds: 0, ...options }), ledger);
 
   const server = new McpServer(
     { name: "moneylover", version: "0.1.0" },
@@ -48,31 +51,47 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
     return rows.map(name);
   };
 
+  const reads = createLocalReads(client, show, ledger);
+  const close = server.close.bind(server);
+  server.close = async () => {
+    try {
+      await close();
+    } finally {
+      ledger?.close();
+    }
+  };
+
   server.registerTool(
     "get_transactions",
     {
       title: "Get saved transactions by ID",
       description:
-        "Return only the requested saved records, using one fresh reconciliation. Pass wallet when known to refresh only that wallet; omitting wallet reconciles the whole account. Prefer record_transactions for new receipts; its verified response needs no extra lookup.",
+        "Return saved records from the persistent local ledger with explicit sync freshness. Pass fresh=true for API reconciliation; pass wallet to avoid whole-account refreshes. Prefer record_transactions for new receipts; its verified response needs no extra lookup.",
       inputSchema: {
         ids: z.array(z.string().min(1)).min(1).max(50),
+        fresh: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Wait for API reconciliation; required for audits or latest-state verification",
+          ),
         wallet: z.string().optional().describe("Payment wallet name or ID, when known"),
       },
     },
-    async ({ ids, wallet }) =>
-      client.withFreshReads(async () => {
-        let rows: Transaction[];
-        if (wallet) {
-          const scoped = await client.transactions({ wallet });
-          rows = ids.map((id) => {
-            const row = scoped.find((candidate) => candidate.id === id);
-            if (!row) throw new Error(`No transaction ${id} in the requested wallet`);
-            return row;
-          });
-        } else rows = await Promise.all(ids.map((id) => client.transaction(id)));
-        return json({ transactions: await show(rows) });
-      }),
+    async ({ ids, wallet, fresh }) => json(await reads.get(ids, wallet, fresh)),
   );
+  if (ledger)
+    server.registerTool(
+      "ledger_status",
+      {
+        title: "Local ledger sync status",
+        annotations: { readOnlyHint: true },
+        description:
+          "Local snapshot timestamps, invalidation and reconciliation errors. No provider calls. Use fresh=true on reads for an API audit.",
+        inputSchema: {},
+      },
+      async () => json({ snapshots: ledger.status() }),
+    );
   registerRecordingTool(
     server,
     client,
@@ -84,9 +103,9 @@ export function createMcpServer(options: ClientOptions = {}): McpServer {
       process.env.MONEYLOVER_MOBILE_TOKEN ??
       process.env.MONEYLOVER_ACCESS_TOKEN,
   );
-  registerReferenceTools(server, client);
-  registerTransactionTools(server, client, show);
-  registerLendingTools(server, client, show);
+  registerReferenceTools(server, client, reads);
+  registerTransactionTools(server, client, show, reads);
+  registerLendingTools(server, client, show, reads);
   // Both opt-in, and independently; see tools/structure.ts and tools/deletions.ts.
   if (structureAllowed()) registerStructureTools(server, client);
   if (deletionsAllowed()) registerDeletionTools(server, client);

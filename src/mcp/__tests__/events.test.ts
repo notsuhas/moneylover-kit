@@ -34,7 +34,7 @@ it("MCP exposes event IDs and forwards tags on expenses, edits and loans", async
     },
     deleteTransaction: async () => {},
   };
-  const server = createMcpServer({ use: backend });
+  const server = createMcpServer({ ledgerPath: false, use: backend });
   const client = new Client({ name: "test", version: "1" });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
