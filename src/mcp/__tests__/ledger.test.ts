@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -24,6 +25,7 @@ test("MCP local reads survive restart, reuse changed filters, and invalidate aft
   let reads = 0;
   let failWrite = false;
   let offline = false;
+  let pendingRead: Promise<void> | undefined;
   const backend: Backend = {
     name: "web",
     can: WEB_CAN,
@@ -33,6 +35,7 @@ test("MCP local reads survive restart, reuse changed filters, and invalidate aft
     events: async () => [],
     transactions: async () => {
       reads++;
+      await pendingRead;
       if (offline) throw Error("offline");
       return rows;
     },
@@ -107,6 +110,26 @@ test("MCP local reads survive restart, reuse changed filters, and invalidate aft
     rows = [];
     assert.equal((await search({ fresh: true })).matched, 0);
     assert.equal((await search()).matched, 0);
+    const db = new DatabaseSync(join(directory, "ledger.sqlite"));
+    db.exec("UPDATE snapshots SET synced_at=0");
+    db.close();
+    let release!: () => void;
+    pendingRead = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    assert.equal((await search()).sync.stale, true);
+    let closed = false;
+    const closing = session.close().then(() => {
+      closed = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const prematurelyClosed = closed;
+    release();
+    await closing;
+    assert.equal(prematurelyClosed, false);
+    session = await start();
+    offline = true;
+    assert.equal((await search()).sync.stale, false);
   } finally {
     await session.close();
     rmSync(directory, { recursive: true, force: true });
