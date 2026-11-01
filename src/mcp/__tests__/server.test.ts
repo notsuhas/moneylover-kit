@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   aCategory,
   aTransaction,
@@ -106,4 +109,46 @@ describe("createMcpServer", () => {
       ._serverInfo.version;
     assert.equal(version, pkg.version);
   });
+});
+
+it("wallet name lookups skip balance scans and cannot poison the balance snapshot", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "wallet-catalog-"));
+  let balanceReads = 0;
+  let catalogReads = 0;
+  const server = createMcpServer({
+    ledgerPath: join(directory, "ledger.sqlite"),
+    use: {
+      ...backend,
+      wallets: async () => {
+        balanceReads++;
+        return backend.wallets();
+      },
+      walletCatalog: async () => {
+        catalogReads++;
+        return [aWallet({ id: "w1", name: "Savings" })];
+      },
+    },
+  });
+  const client = new Client({ name: "catalog-test", version: "1" });
+  const [local, remote] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(local);
+    await client.connect(remote);
+    const names = await client.callTool({
+      name: "list_wallets",
+      arguments: { balances: false, fresh: true },
+    });
+    assert.ok(!names.isError);
+    assert.equal(balanceReads, 0);
+    assert.equal(catalogReads, 1);
+    const full = await client.callTool({ name: "list_wallets", arguments: {} });
+    assert.ok(!full.isError);
+    assert.equal(balanceReads, 1);
+    const content = full.content as { text: string }[];
+    assert.equal(JSON.parse(content[0]?.text ?? "{}").wallets[0].balance.INR, "10.00");
+  } finally {
+    await client.close();
+    await server.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

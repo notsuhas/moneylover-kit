@@ -16,17 +16,27 @@ export function registerReferenceTools(
     {
       title: "List wallets",
       description:
-        "Every wallet by name, with its balance where the backend reports one. " +
-        "These names are what the other tools accept.",
-      inputSchema: { fresh: z.boolean().default(false).describe("Wait for API reconciliation") },
+        "Every wallet by name. Set balances=false for fast wallet-name lookups without scanning transaction history; leave it true when current balances are needed.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        fresh: z.boolean().default(false).describe("Wait for API reconciliation"),
+        balances: z
+          .boolean()
+          .default(true)
+          .describe("False skips transaction scans when only wallet names are needed"),
+      },
     },
-    async ({ fresh }) => {
-      const saved = await reads.value("reference:wallets", () => client.wallets(), fresh);
+    async ({ fresh, balances }) => {
+      const saved = await reads.value(
+        balances ? "reference:wallets" : "reference:wallet-catalog",
+        () => (balances ? client.wallets() : client.walletCatalog()),
+        fresh,
+      );
       return json({
         wallets: saved.value.map((w) => ({
           name: w.name,
           archived: w.archived,
-          ...(w.balance ? { balance: w.balance } : {}),
+          ...(balances && w.balance ? { balance: w.balance } : {}),
         })),
         sync: saved.sync,
       });

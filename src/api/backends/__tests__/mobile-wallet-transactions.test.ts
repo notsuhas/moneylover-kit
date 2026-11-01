@@ -208,3 +208,53 @@ test("wallet category reads remain fresh and reject an ignored provider filter",
     f.close();
   }
 });
+
+test("whole-account balances overlap bounded pages and publish only complete ordered snapshots", async () => {
+  const f = fixture();
+  f.state.rows = Array.from({ length: 2101 }, (_, index) => transaction(`row-${index}`));
+  const fetchPage = globalThis.fetch;
+  let active = 0;
+  let peak = 0;
+  let fail = false;
+  globalThis.fetch = (async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path !== "/api/sync/pull/transaction/v2") return fetchPage(input, init);
+    const body = JSON.parse(String(init?.body));
+    active++;
+    peak = Math.max(peak, active);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (body.skip === 600) await new Promise<void>((resolve) => setImmediate(resolve));
+      if ((fail && body.skip === 600) || body.skip > f.state.rows.length)
+        return Response.json({ status: false, message: "failed page" });
+      return await fetchPage(input, init);
+    } finally {
+      active--;
+    }
+  }) as typeof fetch;
+  try {
+    await f.cache.scope(async () => {
+      assert.equal((await f.backend.wallets())[0]?.balance?.JPY, "-2101");
+      assert.deepEqual(
+        (await f.backend.transactions()).map((row) => row.id),
+        f.state.rows.map((row) => row._id),
+      );
+    });
+    assert.ok(peak > 1 && peak <= 8);
+    assert.equal(active, 0);
+    const before = readFileSync(f.mirror, "utf8");
+    fail = true;
+    await assert.rejects(
+      f.cache.scope(() => f.backend.wallets()),
+      /failed page/,
+    );
+    assert.equal(active, 0);
+    assert.equal(readFileSync(f.mirror, "utf8"), before);
+    fail = false;
+    f.state.rows = [...f.state.rows.slice(1), transaction("new-row", "yen", 5)];
+    assert.equal((await f.cache.scope(() => f.backend.wallets()))[0]?.balance?.JPY, "-2105");
+    assert.ok(f.requests.every((request) => request.lastUpdate === 0));
+  } finally {
+    f.close();
+  }
+});
