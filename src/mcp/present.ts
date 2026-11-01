@@ -52,6 +52,8 @@ settlement decisions. Cached results are not independent write verification.
 Stale reads return immediately and trigger background reconciliation; writes
 invalidate snapshots, and receipt verification always reads upstream directly.
 
+Use list_wallets with balances=false when only resolving wallet names; calculating balances requires a full reconciliation.
+
 For new receipts prefer record_transactions: it performs duplicate checks, batches all
 expense and lending/borrowing legs, and returns verified saved records and balances.
 Keep a stable receiptId. Do not search before record_transactions or repeat search_transactions or list_wallets after verified=true. Include wallet on searches and ID lookups when known to avoid a whole-account refresh.

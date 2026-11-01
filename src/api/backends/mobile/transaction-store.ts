@@ -54,7 +54,7 @@ export function createTransactionStore(
   let inFlight: Promise<RawTransaction[]> | undefined;
 
   async function sync(): Promise<RawTransaction[]> {
-    const update = await pull(0, { skip: 0 });
+    const update = await pull(0, { skip: 0, concurrency: 8 });
     const rows = mergeTransactions([], update.data);
     write(path, { timestamp: update.timestamp, rows });
     return rows;

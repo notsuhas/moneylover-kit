@@ -21,6 +21,7 @@ export interface PullResult<T> {
 export interface PullOptions<T> {
   accountId?: string;
   skip?: number;
+  concurrency?: number;
   onPage?: (rows: T[], state: { nextSkip: number; timestamp: number }) => void | Promise<void>;
 }
 
@@ -73,29 +74,48 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
     lastUpdate: number,
     options: PullOptions<T> = {},
   ): Promise<PullResult<T>> {
+    const concurrency = options.concurrency ?? 1;
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8)
+      throw new MoneyLoverError("Pull concurrency must be an integer between 1 and 8");
     const out: T[] = [];
-    let timestamp = lastUpdate;
     const start = options.skip ?? 0;
-    for (let skip = start; ; skip += PAGE) {
-      const response = await call<{
-        status?: boolean;
-        error?: number;
-        message?: string;
-        data?: T[];
-        timestamp?: number;
-      }>(path, window(lastUpdate, skip, options.accountId));
-      if (response.status === false) {
+    type Page = {
+      status?: boolean;
+      error?: number;
+      message?: string;
+      data?: T[];
+      timestamp?: number;
+    };
+    async function read(skip: number): Promise<Page> {
+      const response = await call<Page>(path, window(lastUpdate, skip, options.accountId));
+      if (response.status === false)
         throw new MoneyLoverError(
           response.message ?? `${path} pull failed`,
           response.error,
           response,
         );
-      }
-      if (skip === start) timestamp = response.timestamp ?? lastUpdate;
+      return response;
+    }
+    const first = await read(start);
+    const timestamp = first.timestamp ?? lastUpdate;
+    async function append(response: Page, skip: number): Promise<boolean> {
       const chunk = response.data ?? [];
       out.push(...chunk);
       await options.onPage?.(chunk, { nextSkip: skip + chunk.length, timestamp });
-      if (chunk.length < PAGE) return { data: out, timestamp };
+      return chunk.length < PAGE;
+    }
+    if (await append(first, start)) return { data: out, timestamp };
+    let width = 1;
+    for (let skip = start + PAGE; ; ) {
+      const pages = await Promise.allSettled(
+        Array.from({ length: width }, (_, index) => read(skip + index * PAGE)),
+      );
+      for (const [index, page] of pages.entries()) {
+        if (page.status === "rejected") throw page.reason;
+        if (await append(page.value, skip + index * PAGE)) return { data: out, timestamp };
+      }
+      skip += PAGE * width;
+      width = concurrency;
     }
   }
 

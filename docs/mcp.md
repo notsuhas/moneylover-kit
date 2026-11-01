@@ -4,7 +4,7 @@ Ten tools over a live account. Two transports, same tools.
 
 | Tool | Does |
 |---|---|
-| `list_wallets` | wallet names, and balances where the backend has them |
+| `list_wallets` | wallet names; set `balances: false` to skip history scans, or leave it true for balances |
 | `list_categories` | what can be written to, income or expense |
 | `search_transactions` | filter by note, wallet, category, date range, amount |
 | `list_events` | event names and IDs for tagging transactions |

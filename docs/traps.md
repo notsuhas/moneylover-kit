@@ -315,7 +315,9 @@ The APK also implements timestamp deltas and cursor pagination. Live timestamp
 deltas did not include known same-session writes, so restoring the old cursor
 cache would not prove receipt readback. Ordinary receipts therefore use fresh
 wallet snapshots; whole-account audits and cross-wallet settlement validation
-keep the full 300-row-page reconciliation. No larger page size was accepted by
+keep the full 300-row-page reconciliation. Large account reads fetch bounded groups
+of pages concurrently, preserve page order and replace the saved snapshot only
+after every required page succeeds. Small histories stay sequential. No larger page size was accepted by
 the live transaction endpoint in the 1,000/3,000/10,000 probes.
 
 ### Balances in different currencies are not comparable

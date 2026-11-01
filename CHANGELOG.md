@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.3
+
+### Patch Changes
+
+- Fetch large whole-account transaction snapshots in bounded concurrent batches
+  while preserving page order and all-or-nothing snapshot replacement. Add
+  list_wallets balances=false for lightweight wallet-name lookups with a
+  separate cache scope; balance reads retain their existing default behavior and
+  independent reconciliation.
+
 ## 0.5.2
 
 ### Patch Changes
