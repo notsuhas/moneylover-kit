@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+### Patch Changes
+
+- a2466f8: Isolate concurrent HTTP transports while sharing the client and
+  SQLite ledger, drain active requests and background refreshes on shutdown,
+  compare bearer tokens safely, report the package version, and preserve the
+  original SQLite transaction error.
+
 ## 0.5.1
 
 ### Patch Changes

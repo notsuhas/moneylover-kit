@@ -1,6 +1,6 @@
 {
   "name": "@notsuhas/moneylover-kit",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Unofficial Money Lover client, CLI and MCP server. Full transaction CRUD.",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,8 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./mcp": "./dist/mcp/server.js"
+    "./mcp": "./dist/mcp/server.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",

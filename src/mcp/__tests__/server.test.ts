@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   aCategory,
@@ -9,6 +11,10 @@ import {
 } from "../../core/__tests__/fixtures.js";
 import type { Backend } from "../../core/types.js";
 import { createMcpServer } from "../server.js";
+
+const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+  version: string;
+};
 
 const backend: Backend = {
   name: "web",
@@ -92,5 +98,12 @@ describe("createMcpServer", () => {
       toolsOf({ MONEYLOVER_MCP_ALLOW_STRUCTURE: "true", MONEYLOVER_MCP_ALLOW_DELETE: "yes" }),
       ALWAYS,
     );
+  });
+
+  it("reports the package version in MCP server metadata", () => {
+    const server = createMcpServer({ ledgerPath: false, use: backend });
+    const version = (server as unknown as { server: { _serverInfo: { version: string } } }).server
+      ._serverInfo.version;
+    assert.equal(version, pkg.version);
   });
 });
