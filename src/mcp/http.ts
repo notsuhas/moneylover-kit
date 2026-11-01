@@ -9,6 +9,7 @@
 
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { bearerAuthorised } from "./bearer-auth.js";
 import { createMcpServer } from "./server.js";
 
 const PORT = Number(process.env.MCP_PORT ?? 8790);
@@ -19,6 +20,17 @@ if (!TOKEN) {
   console.error("MCP_TOKEN is required: this endpoint can create and delete transactions.");
   process.exit(1);
 }
+
+/**
+ * One server for the process.
+ *
+ * Building it per request would rebuild the client and its cache every time —
+ * so `initialize` and `tools/list`, which need no data at all, would each pay
+ * for a full read of every group, and the documented five-minute cache would
+ * never survive a single request. The transport stays per-request, because a
+ * stateless transport is what lets remote clients reconnect freely.
+ */
+const mcp = createMcpServer();
 
 const server = createServer((req, res) => {
   const path = (req.url ?? "").split("?")[0];
@@ -31,17 +43,12 @@ const server = createServer((req, res) => {
     res.writeHead(404, { "content-type": "text/plain" }).end("not found\n");
     return;
   }
-  if (req.headers.authorization !== `Bearer ${TOKEN}`) {
+  if (!bearerAuthorised(req.headers.authorization, TOKEN)) {
     res.writeHead(401, { "content-type": "text/plain" }).end("unauthorized\n");
     return;
   }
 
-  /**
-   * Stateless: a fresh server per request, no session table. Remote clients
-   * reconnect freely and sessions would only be state to lose on restart.
-   */
   void (async () => {
-    const mcp = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -53,10 +60,28 @@ const server = createServer((req, res) => {
       console.error(error);
       if (!res.headersSent) res.writeHead(500).end();
     } finally {
-      void mcp.close();
+      await transport.close();
     }
   })();
 });
+
+async function shutdown(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+  await mcp.close();
+}
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    void shutdown()
+      .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+      })
+      .finally(() => process.exit());
+  });
+}
 
 server.listen(PORT, HOST, () => {
   console.error(`moneylover mcp listening on http://${HOST}:${PORT}/mcp`);
