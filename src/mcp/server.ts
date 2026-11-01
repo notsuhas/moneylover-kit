@@ -8,9 +8,7 @@
  * be walked back.
  */
 
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createClient, type MoneyLover } from "../client/index.js";
@@ -25,27 +23,44 @@ import { registerReferenceTools } from "./tools/reference.js";
 import { registerStructureTools, structureAllowed } from "./tools/structure.js";
 import { type Rendering, registerTransactionTools } from "./tools/transactions.js";
 
-function packageVersion(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 4; i++) {
-    try {
-      return (JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version: string })
-        .version;
-    } catch {
-      dir = dirname(dir);
-    }
-  }
-  throw new Error("package.json not found");
-}
-
-const PACKAGE_VERSION = packageVersion();
+const { version: packageVersion } = createRequire(import.meta.url)(
+  "@notsuhas/moneylover-kit/package.json",
+) as { version: string };
 
 export function createMcpServer(options: ILedgerOptions = {}): McpServer {
+  const runtime = createMcpRuntime(options);
+  const server = runtime.createServer();
+  const close = server.close.bind(server);
+  server.close = async () => {
+    try {
+      await close();
+    } finally {
+      await runtime.close();
+    }
+  };
+  return server;
+}
+
+export function createMcpRuntime(options: ILedgerOptions = {}) {
   const ledger: Ledger | undefined = createLedger(options);
   const client: MoneyLover = observeWrites(createClient({ cacheSeconds: 0, ...options }), ledger);
 
+  return {
+    createServer: () => buildMcpServer(client, ledger, options),
+    close: async () => {
+      await ledger?.drain();
+      ledger?.close();
+    },
+  };
+}
+
+function buildMcpServer(
+  client: MoneyLover,
+  ledger: Ledger | undefined,
+  options: ILedgerOptions,
+): McpServer {
   const server = new McpServer(
-    { name: "moneylover", version: PACKAGE_VERSION },
+    { name: "moneylover", version: packageVersion },
     { instructions: INSTRUCTIONS },
   );
 
@@ -70,15 +85,6 @@ export function createMcpServer(options: ILedgerOptions = {}): McpServer {
   };
 
   const reads = createLocalReads(client, show, ledger);
-  const close = server.close.bind(server);
-  server.close = async () => {
-    try {
-      await close();
-    } finally {
-      await ledger?.drain();
-      ledger?.close();
-    }
-  };
 
   server.registerTool(
     "get_transactions",
