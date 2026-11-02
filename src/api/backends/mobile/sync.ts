@@ -22,6 +22,8 @@ export interface PullOptions<T> {
   accountId?: string;
   skip?: number;
   concurrency?: number;
+  /** Scheduling hint only; live pages always determine where reconciliation ends. */
+  estimatedRows?: number;
   onPage?: (rows: T[], state: { nextSkip: number; timestamp: number }) => void | Promise<void>;
 }
 
@@ -96,26 +98,48 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
         );
       return response;
     }
-    const first = await read(start);
-    const timestamp = first.timestamp ?? lastUpdate;
-    async function append(response: Page, skip: number): Promise<boolean> {
-      const chunk = response.data ?? [];
-      out.push(...chunk);
-      await options.onPage?.(chunk, { nextSkip: skip + chunk.length, timestamp });
-      return chunk.length < PAGE;
-    }
-    if (await append(first, start)) return { data: out, timestamp };
-    let width = 1;
-    for (let skip = start + PAGE; ; ) {
-      const pages = await Promise.allSettled(
-        Array.from({ length: width }, (_, index) => read(skip + index * PAGE)),
-      );
-      for (const [index, page] of pages.entries()) {
-        if (page.status === "rejected") throw page.reason;
-        if (await append(page.value, skip + index * PAGE)) return { data: out, timestamp };
+    if (
+      options.estimatedRows !== undefined &&
+      (!Number.isSafeInteger(options.estimatedRows) || options.estimatedRows < 0)
+    )
+      throw new MoneyLoverError("Estimated row count must be a nonnegative safe integer");
+    const hintedPages =
+      options.estimatedRows === undefined
+        ? 2
+        : Math.max(1, Math.floor(Math.max(0, options.estimatedRows - start) / PAGE) + 1);
+    let horizon = options.estimatedRows === undefined ? Infinity : start + hintedPages * PAGE;
+    let width = hintedPages > 2 ? concurrency : 1;
+    let nextSkip = start;
+    let timestamp = lastUpdate;
+    const pending = new Map<number, Promise<PromiseSettledResult<Page>>>();
+    function fill(skip: number): void {
+      while (nextSkip < Math.min(skip + PAGE * width, horizon)) {
+        const result = read(nextSkip).then(
+          (value): PromiseFulfilledResult<Page> => ({ status: "fulfilled", value }),
+          (reason): PromiseRejectedResult => ({ status: "rejected", reason }),
+        );
+        pending.set(nextSkip, result);
+        nextSkip += PAGE;
       }
-      skip += PAGE * width;
-      width = concurrency;
+    }
+    try {
+      for (let skip = start; ; skip += PAGE) {
+        fill(skip);
+        const result = pending.get(skip);
+        if (!result) throw new MoneyLoverError("Missing scheduled sync page");
+        const page = await result;
+        pending.delete(skip);
+        if (page.status === "rejected") throw page.reason;
+        if (skip === start) timestamp = page.value.timestamp ?? lastUpdate;
+        const chunk = page.value.data ?? [];
+        out.push(...chunk);
+        await options.onPage?.(chunk, { nextSkip: skip + chunk.length, timestamp });
+        if (chunk.length < PAGE) return { data: out, timestamp };
+        if (skip + PAGE >= start + PAGE * 2) width = concurrency;
+        if (skip + PAGE >= horizon) horizon = Infinity;
+      }
+    } finally {
+      await Promise.allSettled(pending.values());
     }
   }
 

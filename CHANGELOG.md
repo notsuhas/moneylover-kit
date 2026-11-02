@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4
+
+### Patch Changes
+
+- Pipeline full snapshot pages instead of waiting at batch boundaries, and prime
+  the bounded request window from the prior snapshot size. Size estimates affect
+  scheduling only: current provider pages still determine completeness, records
+  and balances. Preserve page order, the first response timestamp, and atomic
+  snapshot replacement after all required pages succeed.
+
 ## 0.5.3
 
 ### Patch Changes

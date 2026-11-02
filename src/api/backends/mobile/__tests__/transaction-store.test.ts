@@ -114,3 +114,34 @@ describe("mobile transaction store", () => {
     }
   });
 });
+
+it("reuses only a prior snapshot's size hint while rebuilding all saved records", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "moneylover-size-hint-"));
+  const before = process.env.MONEYLOVER_CONFIG_DIR;
+  process.env.MONEYLOVER_CONFIG_DIR = directory;
+  try {
+    const old = Array.from({ length: 600 }, (_, index) => row(`old-${index}`, 1));
+    await createTransactionStore({ email: "hint@example.invalid" }, async () => ({
+      timestamp: 10,
+      data: old,
+    })).sync();
+    let calls = 0;
+    const store = createTransactionStore(
+      { email: "hint@example.invalid" },
+      async (lastUpdate, options) => {
+        assert.equal(lastUpdate, 0);
+        assert.equal(
+          "estimatedRows" in options ? options.estimatedRows : undefined,
+          calls++ === 0 ? 600 : 1,
+        );
+        return { timestamp: 20, data: [row("live", 5)] };
+      },
+    );
+    assert.deepEqual(await store.sync(), [row("live", 5)]);
+    assert.deepEqual(await store.sync(), [row("live", 5)]);
+  } finally {
+    if (before === undefined) delete process.env.MONEYLOVER_CONFIG_DIR;
+    else process.env.MONEYLOVER_CONFIG_DIR = before;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
