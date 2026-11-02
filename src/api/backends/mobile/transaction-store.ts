@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AuthOptions } from "../../auth.js";
@@ -17,6 +17,16 @@ function storePath(email: string): string {
     process.env.MONEYLOVER_CONFIG_DIR ?? process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
   const who = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 12);
   return join(base, "moneylover-kit", `mobile-transactions-${who}.json`);
+}
+
+function snapshotSize(path: string | undefined): number | undefined {
+  if (!path) return undefined;
+  try {
+    const saved = JSON.parse(readFileSync(path, "utf8")) as StoredTransactions;
+    return saved.version === 2 && Array.isArray(saved.rows) ? saved.rows.length : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function write(path: string | undefined, state: StoredTransactions): void {
@@ -52,11 +62,18 @@ export function createTransactionStore(
   const path = email ? storePath(email) : undefined;
 
   let inFlight: Promise<RawTransaction[]> | undefined;
+  let estimatedRows: number | undefined;
 
   async function sync(): Promise<RawTransaction[]> {
-    const update = await pull(0, { skip: 0, concurrency: 8 });
+    const hint = estimatedRows ?? snapshotSize(path);
+    const update = await pull(0, {
+      skip: 0,
+      concurrency: 8,
+      ...(hint === undefined ? {} : { estimatedRows: hint }),
+    });
     const rows = mergeTransactions([], update.data);
     write(path, { timestamp: update.timestamp, rows });
+    estimatedRows = rows.length;
     return rows;
   }
 
