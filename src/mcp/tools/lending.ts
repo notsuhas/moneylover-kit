@@ -80,18 +80,15 @@ export function registerLendingTools(
       description:
         "Net lending position per person across every wallet: lent, collected, still " +
         "outstanding, and separately what you owe them. Sorted by largest balance. " +
-        "One row per person per currency — balances are never added across currencies.",
+        "One row per person per currency — balances are never added across currencies. " +
+        "Reuses the account ledger across person filters. Cached results may be stale; use fresh=true before settlement decisions.",
       inputSchema: {
         person: z.string().optional().describe("Substring match on the person tag"),
         fresh: z.boolean().default(false),
       },
     },
     async ({ person, fresh }) => {
-      const saved = await reads.value(
-        `lending:${person ?? ""}`,
-        () => client.lending(person),
-        fresh,
-      );
+      const saved = await reads.lending(person, fresh);
       const rows = saved.value;
       // Totals per currency: summing across them would invent an exchange rate.
       const totals = [...new Set(rows.map((r) => r.currencyId))].map((currencyId) => {

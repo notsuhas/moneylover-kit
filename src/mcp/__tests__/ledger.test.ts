@@ -6,8 +6,17 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { aCategory, aTransaction, aWallet, WEB_CAN } from "../../core/__tests__/fixtures.js";
+import { createClient } from "../../client/index.js";
+import {
+  aCategory,
+  aTransaction,
+  aWallet,
+  lendingCategories,
+  WEB_CAN,
+} from "../../core/__tests__/fixtures.js";
+import { Ledger } from "../../core/ledger.js";
 import type { Backend, Transaction } from "../../core/types.js";
+import { createLocalReads } from "../ledger.js";
 import { createMcpServer } from "../server.js";
 
 test("MCP local reads survive restart, reuse changed filters, and invalidate after an uncertain write", async () => {
@@ -106,7 +115,10 @@ test("MCP local reads survive restart, reuse changed filters, and invalidate aft
       arguments: { wallet: "Cash", category: "Food", amount: -20, note: "Lunch" },
     });
     assert.equal(failed.isError, true);
-    assert.equal((await search()).matched, 2);
+    const invalidated = await search();
+    assert.equal(invalidated.sync.stale, true);
+    assert.equal(invalidated.sync.invalidated, true);
+    assert.equal((await search({ fresh: true })).matched, 2);
     rows = [];
     assert.equal((await search({ fresh: true })).matched, 0);
     assert.equal((await search()).matched, 0);
@@ -132,6 +144,102 @@ test("MCP local reads survive restart, reuse changed filters, and invalidate aft
     assert.equal((await search()).sync.stale, false);
   } finally {
     await session.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("new person filters derive currency-separated lending from shared snapshots offline", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "lending-ledger-"));
+  const ledger = new Ledger(join(directory, "ledger.sqlite"));
+  let offline = false;
+  let calls = 0;
+  const read = <T>(value: T): Promise<T> => {
+    calls++;
+    return offline ? Promise.reject(Error("offline")) : Promise.resolve(value);
+  };
+  const backend: Backend = {
+    name: "web",
+    can: WEB_CAN,
+    account: async () => ({ id: "user", email: "test@example.com", deviceLimit: 5 }),
+    wallets: () =>
+      read([
+        aWallet({ id: "inr", name: "Card", currencyId: 11 }),
+        aWallet({ id: "jpy", name: "Cash", currencyId: 22 }),
+      ]),
+    categories: () => read(lendingCategories),
+    transactions: () =>
+      read([
+        aTransaction({
+          id: "loan",
+          walletId: "inr",
+          categoryId: "loan",
+          amount: -123.45,
+          people: ["Casey"],
+        }),
+        aTransaction({
+          id: "debt",
+          walletId: "jpy",
+          categoryId: "debt",
+          type: "income",
+          amount: 700.11,
+          people: ["Casey"],
+        }),
+        aTransaction({
+          id: "other",
+          walletId: "inr",
+          categoryId: "loan",
+          amount: -20,
+          people: ["Taylor"],
+        }),
+      ]),
+    addTransaction: async () => "new",
+    editTransaction: async () => {},
+    deleteTransaction: async () => {},
+  };
+  const client = createClient({ use: backend, cacheSeconds: 0 });
+  const reads = createLocalReads(
+    client,
+    async (rows) => rows.map((row) => ({ id: row.id })),
+    ledger,
+  );
+  try {
+    await reads.search({}, 10, true);
+    await reads.value("reference:wallet-catalog", () => client.walletCatalog(), true);
+    const before = calls;
+    offline = true;
+    const saved = await reads.lending("Casey", false);
+    assert.deepEqual(
+      saved.value.map(({ currencyId, outstanding, owing }) => ({ currencyId, outstanding, owing })),
+      [
+        { currencyId: 11, outstanding: 123.45, owing: 0 },
+        { currencyId: 22, outstanding: 0, owing: 700.11 },
+      ],
+    );
+    assert.equal((await reads.lending("Taylor", false)).value[0]?.outstanding, 20);
+    assert.equal(calls, before);
+    const db = new DatabaseSync(join(directory, "ledger.sqlite"));
+    try {
+      const row = db.prepare("SELECT metadata FROM snapshots WHERE scope='account'").get();
+      const metadata = JSON.parse(String(row?.metadata));
+      const { wallets: _wallets, ...legacy } = metadata;
+      const update = db.prepare("UPDATE snapshots SET metadata=? WHERE scope='account'");
+      update.run(JSON.stringify(legacy));
+      assert.deepEqual((await reads.lending("Casey", false)).value, saved.value);
+      assert.equal(calls, before);
+      update.run(JSON.stringify({ ...metadata, wallets: [] }));
+      await assert.rejects(reads.lending("Casey", false), /wallet currency is unavailable/);
+      update.run(JSON.stringify(metadata));
+    } finally {
+      db.close();
+    }
+    ledger.invalidate();
+    const stale = await reads.lending("Casey", false);
+    assert.equal(stale.sync.stale, true);
+    assert.equal(stale.sync.invalidated, true);
+    await assert.rejects(reads.lending("Casey", true), /offline/);
+  } finally {
+    await ledger.drain();
+    ledger.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });

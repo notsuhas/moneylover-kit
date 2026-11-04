@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.5
+
+### Patch Changes
+
+- Keep cached MCP reads available after writes, with explicit stale and
+  invalidated flags, while reconciliation runs in the background. Reuse account
+  snapshots for lending summaries across person filters. Fresh audits,
+  settlement decisions, permission checks and receipt verification still require
+  upstream reconciliation.
+
 ## 0.5.4
 
 ### Patch Changes

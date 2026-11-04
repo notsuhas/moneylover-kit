@@ -162,11 +162,16 @@ Pass `fresh: true` for audits, current balances, or settlement decisions; the
 first read of a scope also waits for a complete API reconciliation.
 
 Writes invalidate snapshots before and after the attempt, even after a timeout.
+Ordinary reads can still return those snapshots immediately, marked with both
+`sync.invalidated: true` and `sync.stale: true`, while reconciliation runs.
+Use `fresh: true` before deciding whether a timed-out write saved or settling a debt.
 Receipt duplicate checks and independent write verification bypass the ledger.
 A complete refresh replaces all rows, including external edits and deletions.
 Transient failures retain the last complete snapshot with an error and retry
 backoff; observed authorization failures block it until access is restored.
 Access changes cannot be detected while serving a snapshot without a network call.
+Lending summaries derive from the shared account snapshot and wallet catalog;
+changing the person filter does not require a separate account scan.
 
 `ledger_status` reports each saved scope. Reference list results now wrap their
 array under a named field alongside `sync`; consumers must read that field.

@@ -49,8 +49,9 @@ export const INSTRUCTIONS = `Read and write transactions in a live Money Lover a
 MCP read tools use persistent SQLite snapshots and include sync metadata. Treat
 lastSyncedAt as the as-of time. Pass fresh=true for audits, current balances and
 settlement decisions. Cached results are not independent write verification.
-Stale reads return immediately and trigger background reconciliation; writes
-invalidate snapshots, and receipt verification always reads upstream directly.
+Stale reads return immediately and trigger background reconciliation, including
+snapshots invalidated by writes (sync.invalidated=true). Never use these to decide
+whether a timed-out write saved. Receipt verification reads upstream directly.
 
 Use list_wallets with balances=false when only resolving wallet names; calculating balances requires a full reconciliation.
 

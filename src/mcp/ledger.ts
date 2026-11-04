@@ -2,9 +2,16 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClientOptions, MoneyLover } from "../client/index.js";
-import { Ledger } from "../core/ledger.js";
+import { type ILedgerSync, Ledger } from "../core/ledger.js";
+import { lendingKindOf, lendingSummary } from "../core/lending.js";
 import { filterCategory, filterTransactions } from "../core/query.js";
-import type { Category, Transaction, TransactionQuery } from "../core/types.js";
+import {
+  type Category,
+  MoneyLoverError,
+  type Transaction,
+  type TransactionQuery,
+  type Wallet,
+} from "../core/types.js";
 import type { Rendering } from "./tools/transactions.js";
 
 export interface ILedgerOptions extends ClientOptions {
@@ -15,6 +22,11 @@ interface IRow {
   id: string;
   raw: Transaction;
   view: Record<string, unknown>;
+}
+
+interface IMetadata {
+  categories: Category[];
+  wallets?: Wallet[];
 }
 
 export function createLedger(options: ILedgerOptions): Ledger | undefined {
@@ -84,23 +96,25 @@ export function observeWrites(client: MoneyLover, ledger?: Ledger): MoneyLover {
 }
 
 export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: Ledger) {
-  async function snapshot(wallet: string | undefined, fresh: boolean) {
+  async function snapshot(
+    wallet: string | undefined,
+    fresh: boolean,
+  ): Promise<{ rows: IRow[]; metadata: IMetadata; sync: ILedgerSync }> {
     const load = () =>
       client.withFreshReads(async () => {
         const rows = await client.transactions(wallet ? { wallet } : {});
-        const views = await show(rows);
-        const categories = await client.categories(wallet);
+        const [views, categories, wallets] = await Promise.all([
+          show(rows),
+          client.categories(wallet),
+          client.walletCatalog(),
+        ]);
         return {
           rows: rows.map((raw, index) => ({ id: raw.id, raw, view: views[index] ?? {} })),
-          metadata: { categories },
+          metadata: { categories, wallets },
         };
       });
     if (ledger)
-      return ledger.read<IRow, { categories: Category[] }>(
-        wallet ? `wallet:${wallet}` : "account",
-        load,
-        fresh,
-      );
+      return ledger.read<IRow, IMetadata>(wallet ? `wallet:${wallet}` : "account", load, fresh);
     return {
       ...(await load()),
       sync: {
@@ -112,7 +126,11 @@ export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: L
     };
   }
   return {
-    async value<T>(scope: string, load: () => Promise<T>, fresh: boolean) {
+    async value<T>(
+      scope: string,
+      load: () => Promise<T>,
+      fresh: boolean,
+    ): Promise<{ value: T; sync: ILedgerSync }> {
       if (ledger) return ledger.value(scope, () => client.withFreshReads(load), fresh);
       return {
         value: await client.withFreshReads(load),
@@ -153,6 +171,58 @@ export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: L
           return row.view;
         }),
         sync: saved.sync,
+      };
+    },
+    async lending(person: string | undefined, fresh: boolean) {
+      const saved = await snapshot(undefined, fresh);
+      const wallets = saved.metadata.wallets
+        ? { value: saved.metadata.wallets, sync: saved.sync }
+        : ledger
+          ? await ledger.value(
+              "reference:wallet-catalog",
+              () => client.withFreshReads(() => client.walletCatalog()),
+              fresh,
+            )
+          : {
+              value: await client.walletCatalog(),
+              sync: saved.sync,
+            };
+      const sync = {
+        ...saved.sync,
+        source:
+          saved.sync.source === "api" && wallets.sync.source === "api"
+            ? ("api" as const)
+            : ("ledger" as const),
+        lastSyncedAt:
+          saved.sync.lastSyncedAt < wallets.sync.lastSyncedAt
+            ? saved.sync.lastSyncedAt
+            : wallets.sync.lastSyncedAt,
+        stale: saved.sync.stale || wallets.sync.stale,
+        refreshing: saved.sync.refreshing || wallets.sync.refreshing,
+        ...(wallets.sync.invalidated ? { invalidated: true as const } : {}),
+        ...(wallets.sync.lastError ? { lastError: wallets.sync.lastError } : {}),
+      };
+      const currencyOf = new Map(wallets.value.map((wallet) => [wallet.id, wallet.currencyId]));
+      const rows = saved.rows
+        .map((row) => row.raw)
+        .filter(
+          (row) =>
+            !person ||
+            (row.people.length ? row.people : ["(unnamed)"]).some((name) =>
+              name.toLowerCase().includes(person.toLowerCase()),
+            ),
+        );
+      if (
+        rows.some(
+          (row) => !currencyOf.has(row.walletId) && lendingKindOf(row, saved.metadata.categories),
+        )
+      )
+        throw new MoneyLoverError(
+          "Lending wallet currency is unavailable; reconcile the wallet before settlement",
+        );
+      return {
+        value: lendingSummary(rows, saved.metadata.categories, person, currencyOf),
+        sync,
       };
     },
   };

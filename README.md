@@ -286,5 +286,8 @@ MCP read tools now return local SQLite snapshots with explicit `sync` metadata.
 Pass `fresh: true` for an audit or latest upstream state. A stale read starts
 background reconciliation; receipt writes and verification always use fresh API
 reads. This reduces repeated provider calls without promising network latency.
-Node 22.13+ is required. See [MCP caching](docs/mcp.md) for migration, response
-shape changes, recovery and private-volume requirements.
+After a write, cached reads remain available with `sync.invalidated: true` and
+`sync.stale: true`. They are not proof that a pending write saved. Lending
+summaries reuse the account snapshot across people instead of scanning again for
+each name. Node 22.13+ is required. See [MCP caching](docs/mcp.md) for
+migration, response shape changes, recovery and private-volume requirements.

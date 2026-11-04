@@ -134,10 +134,48 @@ test("a mutation discards an older in-flight refresh and invalidates every scope
     b.invalidate();
     release();
     assert.equal((await pending).rows[0]?.amount, 2);
-    assert.equal((await a.read("other", async () => data(99))).rows[0]?.amount, 99);
+    assert.equal((await a.read("other", async () => data(99), true)).rows[0]?.amount, 99);
   } finally {
     a.close();
     b.close();
+    f.close();
+  }
+});
+
+test("invalidated reads stay local while a write's reconciliation is slow or fails", async () => {
+  const f = fixture();
+  const ledger = f.open();
+  let reject!: (error: Error) => void;
+  const pending = new Promise<never>((_resolve, fail) => {
+    reject = fail;
+  });
+  let calls = 0;
+  const load = async (): Promise<ReturnType<typeof data>> => {
+    calls++;
+    return pending;
+  };
+  try {
+    await ledger.read("wallet", async () => data());
+    ledger.invalidate();
+    const cached = await ledger.read("wallet", load);
+    assert.equal(cached.rows[0]?.amount, 10);
+    assert.equal(cached.sync.invalidated, true);
+    assert.equal(cached.sync.stale, true);
+    assert.equal(cached.sync.refreshing, true);
+    const audited = ledger.read("wallet", load, true);
+    reject(Error("provider timeout"));
+    await assert.rejects(audited, /provider timeout/);
+    const retained = await ledger.read("wallet", load);
+    assert.equal(retained.sync.lastError, "provider timeout");
+    assert.equal(retained.sync.invalidated, true);
+    assert.equal(retained.sync.refreshing, false);
+    assert.equal(calls, 1);
+    const reconciled = await ledger.read("wallet", async () => data(20), true);
+    assert.equal(reconciled.rows[0]?.amount, 20);
+    assert.equal(reconciled.sync.stale, false);
+    assert.equal(reconciled.sync.invalidated, undefined);
+  } finally {
+    ledger.close();
     f.close();
   }
 });

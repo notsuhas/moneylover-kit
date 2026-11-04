@@ -19,6 +19,7 @@ export interface ILedgerSync {
   lastSyncedAt: string;
   stale: boolean;
   refreshing: boolean;
+  invalidated?: true;
   lastError?: string;
 }
 
@@ -203,15 +204,16 @@ export class Ledger {
     if (this.closed) throw new Error("Ledger closed");
     let snapshot = this.snapshot<T, M>(scope);
     let source: ILedgerSync["source"] = "ledger";
-    if (fresh || !snapshot || snapshot.blocked || snapshot.epoch !== this.epoch()) {
+    if (fresh || !snapshot || snapshot.blocked) {
       await this.refresh(scope, load);
       snapshot = this.snapshot<T, M>(scope);
       source = "api";
     }
-    if (!snapshot || snapshot.blocked || snapshot.epoch !== this.epoch())
+    if (!snapshot || snapshot.blocked || (fresh && snapshot.epoch !== this.epoch()))
       throw new Error("No complete ledger snapshot");
+    const invalidated = snapshot.epoch !== this.epoch();
     const age = this.now() - snapshot.syncedAt;
-    const stale = age < 0 || age >= this.refreshAfterMs || Boolean(snapshot.error);
+    const stale = invalidated || age < 0 || age >= this.refreshAfterMs || Boolean(snapshot.error);
     const retryDelay = Math.min(300_000, this.refreshAfterMs * 2 ** Math.min(snapshot.failures, 4));
     if (!fresh && stale && (!snapshot.error || this.now() - snapshot.attemptedAt >= retryDelay)) {
       void this.refresh(scope, load).catch(() => undefined);
@@ -224,6 +226,7 @@ export class Ledger {
         lastSyncedAt: new Date(snapshot.syncedAt).toISOString(),
         stale,
         refreshing: this.running.has(scope),
+        ...(invalidated ? { invalidated: true as const } : {}),
         ...(snapshot.error ? { lastError: snapshot.error } : {}),
       },
     };
