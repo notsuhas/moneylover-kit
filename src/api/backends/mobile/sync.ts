@@ -44,7 +44,7 @@ export interface Sync {
 export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
   const token = () => accessToken({ ...auth, backend: "mobile" });
 
-  async function call<T>(path: string, body: unknown = {}): Promise<T> {
+  async function call<T>(path: string, body: unknown = {}, signal?: AbortSignal): Promise<T> {
     return post<T>(`${API}${path}`, {
       headers: {
         authorization: `Bearer ${await token()}`,
@@ -56,6 +56,7 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
         appversion: String(AV),
       },
       body,
+      ...(signal ? { signal } : {}),
     });
   }
 
@@ -79,6 +80,7 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
     const concurrency = options.concurrency ?? 1;
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8)
       throw new MoneyLoverError("Pull concurrency must be an integer between 1 and 8");
+    const controller = new AbortController();
     const out: T[] = [];
     const start = options.skip ?? 0;
     type Page = {
@@ -89,7 +91,11 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
       timestamp?: number;
     };
     async function read(skip: number): Promise<Page> {
-      const response = await call<Page>(path, window(lastUpdate, skip, options.accountId));
+      const response = await call<Page>(
+        path,
+        window(lastUpdate, skip, options.accountId),
+        controller.signal,
+      );
       if (response.status === false)
         throw new MoneyLoverError(
           response.message ?? `${path} pull failed`,
@@ -139,6 +145,7 @@ export function createSync(auth: Omit<AuthOptions, "backend">): Sync {
         if (skip + PAGE >= horizon) horizon = Infinity;
       }
     } finally {
+      controller.abort();
       await Promise.allSettled(pending.values());
     }
   }

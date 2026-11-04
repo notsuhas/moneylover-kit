@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { withReadDeadline } from "../api/http.js";
 import type { ClientOptions, MoneyLover } from "../client/index.js";
 import { type ILedgerSync, Ledger } from "../core/ledger.js";
 import { lendingKindOf, lendingSummary } from "../core/lending.js";
@@ -101,18 +102,20 @@ export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: L
     fresh: boolean,
   ): Promise<{ rows: IRow[]; metadata: IMetadata; sync: ILedgerSync }> {
     const load = () =>
-      client.withFreshReads(async () => {
-        const rows = await client.transactions(wallet ? { wallet } : {});
-        const [views, categories, wallets] = await Promise.all([
-          show(rows),
-          client.categories(wallet),
-          client.walletCatalog(),
-        ]);
-        return {
-          rows: rows.map((raw, index) => ({ id: raw.id, raw, view: views[index] ?? {} })),
-          metadata: { categories, wallets },
-        };
-      });
+      withReadDeadline(() =>
+        client.withFreshReads(async () => {
+          const rows = await client.transactions(wallet ? { wallet } : {});
+          const [views, categories, wallets] = await Promise.all([
+            show(rows),
+            client.categories(wallet),
+            client.walletCatalog(),
+          ]);
+          return {
+            rows: rows.map((raw, index) => ({ id: raw.id, raw, view: views[index] ?? {} })),
+            metadata: { categories, wallets },
+          };
+        }),
+      );
     if (ledger)
       return ledger.read<IRow, IMetadata>(wallet ? `wallet:${wallet}` : "account", load, fresh);
     return {
@@ -131,9 +134,14 @@ export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: L
       load: () => Promise<T>,
       fresh: boolean,
     ): Promise<{ value: T; sync: ILedgerSync }> {
-      if (ledger) return ledger.value(scope, () => client.withFreshReads(load), fresh);
+      if (ledger)
+        return ledger.value(
+          scope,
+          () => withReadDeadline(() => client.withFreshReads(load)),
+          fresh,
+        );
       return {
-        value: await client.withFreshReads(load),
+        value: await withReadDeadline(() => client.withFreshReads(load)),
         sync: {
           source: "api" as const,
           lastSyncedAt: new Date().toISOString(),
@@ -180,7 +188,7 @@ export function createLocalReads(client: MoneyLover, show: Rendering, ledger?: L
         : ledger
           ? await ledger.value(
               "reference:wallet-catalog",
-              () => client.withFreshReads(() => client.walletCatalog()),
+              () => withReadDeadline(() => client.withFreshReads(() => client.walletCatalog())),
               fresh,
             )
           : {

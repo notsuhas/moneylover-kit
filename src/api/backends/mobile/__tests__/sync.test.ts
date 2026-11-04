@@ -82,3 +82,39 @@ test("stale size estimates cannot truncate or replace a fresh reconciliation", a
     globalThis.fetch = previous;
   }
 });
+
+test("a terminal page cancels an unneeded stalled speculative request", async () => {
+  const previous = globalThis.fetch;
+  const rows = Array.from({ length: 601 }, (_, index) => index);
+  let cancelled = false;
+  globalThis.fetch = (async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.skip === 900)
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            cancelled = true;
+            reject(init.signal?.reason);
+          },
+          { once: true },
+        );
+      });
+    return Response.json({
+      status: true,
+      timestamp: 123,
+      data: rows.slice(body.skip, body.skip + body.limit),
+    });
+  }) as typeof fetch;
+  try {
+    const result = await createSync({ token: "test" }).pullSince<number>(
+      "/api/sync/pull/transaction/v2",
+      0,
+      { concurrency: 2 },
+    );
+    assert.deepEqual(result.data, rows);
+    assert.equal(cancelled, true);
+  } finally {
+    globalThis.fetch = previous;
+  }
+});

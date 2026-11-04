@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.6
+
+### Patch Changes
+
+- Bound MCP API snapshot loads to 20 seconds, interrupt read retry waits, and
+  cancel unneeded speculative sync pages. Preserve the previous complete ledger
+  on provider stalls and keep authorization errors blocking cached access.
+  Financial pushes retain one attempt and their separate timeout. These limits
+  prevent prolonged waits; they do not guarantee successful provider reads.
+
 ## 0.5.5
 
 ### Patch Changes

@@ -164,3 +164,79 @@ test("financial push failures are never retried without reconciliation", async (
     globalThis.fetch = before;
   }
 });
+
+test("a read deadline aborts a stalled response body without retrying it", async () => {
+  const { withReadDeadline } = await import("../http.js");
+  let calls = 0;
+  stubFetch((_url, init) => {
+    calls++;
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"data":['));
+          init.signal?.addEventListener("abort", () => controller.error(init.signal?.reason), {
+            once: true,
+          });
+        },
+      }),
+    );
+  });
+  await assert.rejects(
+    withReadDeadline(() => post("https://example.test/read"), 20),
+    { name: "TimeoutError" },
+  );
+  assert.equal(calls, 1);
+});
+
+test("a read deadline interrupts retry backoff and does not leak into another scope", async () => {
+  const { withReadDeadline } = await import("../http.js");
+  let calls = 0;
+  stubFetch(() => {
+    calls++;
+    return new Response("unavailable", { status: 503 });
+  });
+  await assert.rejects(
+    withReadDeadline(() => post("https://example.test/read"), 20),
+    { name: "TimeoutError" },
+  );
+  assert.equal(calls, 1);
+  stubFetch((_url, init) => {
+    assert.equal(init.signal?.aborted, false);
+    return ok({ saved: true });
+  });
+  assert.deepEqual(await withReadDeadline(() => post("https://example.test/read")), {
+    saved: true,
+  });
+});
+
+test("expiring a read scope never aborts or replays an in-flight financial push", async () => {
+  const { withReadDeadline } = await import("../http.js");
+  let calls = 0;
+  stubFetch(async (_url, init) => {
+    calls++;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(init.signal?.aborted, false);
+    return ok({ saved: true });
+  });
+  assert.deepEqual(
+    await withReadDeadline(() => post("https://example.test/api/sync/push/transaction/v2"), 10),
+    { saved: true },
+  );
+  assert.equal(calls, 1);
+});
+
+test("permission failures keep their status even when the error body stalls", async () => {
+  const { withReadDeadline } = await import("../http.js");
+  for (const status of [401, 403]) {
+    let calls = 0;
+    stubFetch(() => {
+      calls++;
+      return new Response(new ReadableStream(), { status });
+    });
+    await assert.rejects(
+      withReadDeadline(() => post("https://example.test/read"), 20),
+      (error) => error instanceof MoneyLoverError && error.code === status,
+    );
+    assert.equal(calls, 1);
+  }
+});

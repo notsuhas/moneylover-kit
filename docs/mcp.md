@@ -160,6 +160,10 @@ returns the saved snapshot immediately and starts background reconciliation.
 There is no periodic polling: an unused scope can be arbitrarily old.
 Pass `fresh: true` for audits, current balances, or settlement decisions; the
 first read of a scope also waits for a complete API reconciliation.
+API snapshot loads share a 20-second deadline across their reads and retry waits.
+An incomplete refresh fails without replacing the saved snapshot. Financial
+pushes keep their separate timeout and are never automatically replayed.
+Pagination cancels speculative pages once a complete result or failure is known.
 
 Writes invalidate snapshots before and after the attempt, even after a timeout.
 Ordinary reads can still return those snapshots immediately, marked with both

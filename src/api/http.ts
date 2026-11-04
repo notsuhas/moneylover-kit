@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { MoneyLoverError } from "../core/types.js";
 
 /**
@@ -9,7 +10,40 @@ const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const readDeadlines = new AsyncLocalStorage<AbortSignal>();
+
+export async function withReadDeadline<T>(
+  operation: () => Promise<T>,
+  timeoutMs = 20_000,
+): Promise<T> {
+  if (readDeadlines.getStore()) return operation();
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("Read deadline exceeded", "TimeoutError")),
+    timeoutMs,
+  );
+  try {
+    return await readDeadlines.run(controller.signal, operation);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
 
 const NETWORK_CODES = ["ECONNRESET", "ETIMEDOUT", "EPIPE", "ENOTFOUND", "EAI_AGAIN"];
 
@@ -29,21 +63,25 @@ export interface RequestOptions {
   form?: Record<string, string>;
   attempts?: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /** Retry reads, but never replay an uncertain financial push. */
 export async function post<T>(url: string, options: RequestOptions = {}): Promise<T> {
+  const mutation =
+    /\/api\/sync\/push\/|\/(?:transaction|wallet|category)\/(?:add|edit|delete)(?:$|\?)/.test(url);
   const {
     headers = {},
     body,
     form,
-    attempts = /\/api\/sync\/push\/|\/(?:transaction|wallet|category)\/(?:add|edit|delete)(?:$|\?)/.test(
-      url,
-    )
-      ? 1
-      : 4,
-    timeoutMs = 60_000,
+    attempts = mutation ? 1 : 2,
+    timeoutMs = mutation ? 60_000 : 8_000,
   } = options;
+  const deadline = mutation ? undefined : readDeadlines.getStore();
+  const signal =
+    options.signal && deadline
+      ? AbortSignal.any([options.signal, deadline])
+      : (options.signal ?? deadline);
   const payload = form ? new URLSearchParams(form).toString() : JSON.stringify(body ?? {});
   const contentType = form
     ? "application/x-www-form-urlencoded"
@@ -51,11 +89,13 @@ export async function post<T>(url: string, options: RequestOptions = {}): Promis
 
   for (let attempt = 1; ; attempt++) {
     try {
+      signal?.throwIfAborted();
+      const timeout = AbortSignal.timeout(timeoutMs);
       const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": contentType, "user-agent": BROWSER_UA, ...headers },
         body: payload,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
       if (res.ok) {
         const text = await res.text();
@@ -66,8 +106,13 @@ export async function post<T>(url: string, options: RequestOptions = {}): Promis
           throw new MoneyLoverError(`${url} returned non-JSON: ${text.slice(0, 200)}`);
         }
       }
+      if (res.status === 401 || res.status === 403) {
+        void res.body?.cancel().catch(() => undefined);
+        throw new MoneyLoverError(`${url} -> HTTP ${res.status}`, res.status);
+      }
       if ((res.status === 429 || res.status >= 500) && attempt < attempts) {
-        await sleep(2 ** attempt * 1000);
+        await res.body?.cancel();
+        await sleep(2 ** attempt * 1000, signal);
         continue;
       }
       throw new MoneyLoverError(
@@ -75,8 +120,14 @@ export async function post<T>(url: string, options: RequestOptions = {}): Promis
         res.status,
       );
     } catch (err) {
-      if (err instanceof MoneyLoverError || !isNetworkError(err) || attempt === attempts) throw err;
-      await sleep(2 ** attempt * 1000);
+      if (
+        signal?.aborted ||
+        err instanceof MoneyLoverError ||
+        !isNetworkError(err) ||
+        attempt === attempts
+      )
+        throw err;
+      await sleep(2 ** attempt * 1000, signal);
     }
   }
 }
